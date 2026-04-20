@@ -1,0 +1,106 @@
+{
+  "project_name": "EduCore SaaS Platform",
+  "domain": "Education Management (ERP)",
+  "theme": "LIGHT",
+  "archetype": "1 (Organic & Earthy) - Modified for Old Money Tech / Academic Editorial",
+  "mood": "Trustworthy, Structured, Premium, Clarifying, Academic",
+  "design_principles": [
+    "Emotion First: The design must feel established, ivy-league, and trustworthy, avoiding standard SaaS \"tech\" aesthetics.",
+    "Contrast over Saturation: Rely on dark forest green and stark whites against warm sand backgrounds.",
+    "Negative Space: Generous spacing, let data-dense tables breathe.",
+    "Content is King: Strict typography scale, utilizing variable weights."
+  ],
+  "color_system": {
+    "background_base": "#F7F5F0",
+    "background_surface": "#FFFFFF",
+    "primary": "#1A362D",
+    "primary_hover": "#264F42",
+    "text_main": "#1A1A1A",
+    "text_muted": "#5C5C5C",
+    "border": "#E5E1D5",
+    "accent_terracotta": "#D46B4E",
+    "accent_ochre": "#DDAA55",
+    "accent_sage": "#8E9E90",
+    "glass_background": "rgba(255, 255, 255, 0.7)",
+    "glass_border": "rgba(255, 255, 255, 0.4)",
+    "rules": [
+      "NEVER use pure #000000. Always tint greys.",
+      "NEVER use generic full-screen gradients. NO purple, violet, or teal.",
+      "Primary CTA uses #1A362D. Secondary uses #F7F5F0 with #1A362D border."
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "headings": "'Playfair Display', serif",
+      "body": "'Outfit', sans-serif"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-none font-serif font-black",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight leading-tight font-serif font-bold",
+      "h3": "text-xl sm:text-2xl tracking-tight font-serif font-semibold",
+      "h4": "text-lg sm:text-xl font-sans font-medium",
+      "body": "text-base leading-relaxed font-sans",
+      "small": "text-sm text-text_muted font-sans",
+      "overline": "text-xs uppercase tracking-[0.2em] font-semibold text-text_muted"
+    },
+    "rules": [
+      "Import 'Playfair Display' and 'Outfit' from Google Fonts via CSS.",
+      "Do NOT use 'Inter', 'Roboto', or 'Open Sans'.",
+      "Headings must always use letter spacing 'tracking-tight'."
+    ]
+  },
+  "surfaces_and_materials": {
+    "dashboard_cards": "Flat solid background (#FFFFFF). 1px subtle border (#E5E1D5), no shadow. Hover: slight lift (-translate-y-1) and shadow-lg.",
+    "glassmorphism_nav": "For sticky headers or AI widgets: backdrop-blur-xl bg-white/70 border border-white/40 shadow-sm.",
+    "grid_borders": "For data tables: Exposed grids. border-collapse with border-b border-[#E5E1D5]."
+  },
+  "spacing_and_layout": {
+    "spacing_scale": "Use 2-3x typical spacing. p-8 or p-12 for standard sections.",
+    "marketing_grid": "Mode A: Tetris Grid. grid-cols-1 md:grid-cols-12 gap-8 to gap-12. Asymmetrical spans.",
+    "dashboard_grid": "Mode B: Control Room Grid. grid-cols-1 md:grid-cols-3 lg:grid-cols-4. gap-6. Every pixel utilized, h-full on children.",
+    "container_padding": "Containers with borders MUST have internal padding (p-6 or p-8) to prevent text collision."
+  },
+  "components": {
+    "buttons": "Square or very slightly rounded (rounded-sm). Primary: bg-[#1A362D] text-white hover:bg-[#264F42] hover:text-white.",
+    "inputs_and_forms": "Use Shadcn customized components. Flat, 1px border. Focus: ring-1 ring-[#1A362D] border-[#1A362D].",
+    "tables": "Dense layout. Data left-aligned. Header rows use overline text styling (uppercase, tracking-[0.2em]).",
+    "ai_assistant_widget": "Floating bottom-right. Glassmorphism panel. Use #D46B4E (Terracotta) for active indicator dot. Message bubbles in #F7F5F0.",
+    "notices_board": "List format with massive gaps (gap-6) between items. Editorial ribbon style.",
+    "badges": "Flat background (e.g., bg-[#F7F5F0]), dark text, 1px border."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "2px stroke, sharp corners if available. Keep simple."
+  },
+  "media": [
+    {
+      "category": "hero_background",
+      "url": "https://static.prod-images.emergentagent.com/jobs/0189ebdf-8db6-43d6-91e9-f93170f093e5/images/8bbd332c07a677e2ea6de403aa8c441a35a4b9cd87c473822fb8e21e38e16d98.png",
+      "description": "Premium modern university architecture for landing page hero or auth page split screen. Use with a bg-black/30 or bg-white/20 overlay if text is present."
+    },
+    {
+      "category": "marketing_features",
+      "url": "https://images.pexels.com/photos/1454360/pexels-photo-1454360.jpeg",
+      "description": "Group of college students. Use in marketing section to add human element."
+    },
+    {
+      "category": "about_institution",
+      "url": "https://images.unsplash.com/photo-1709085783594-666111a690d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwzfHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBjYW1wdXN8ZW58MHx8fHwxNzc2NjY4NzMzfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Institution building for feature backgrounds or dashboard welcome cards."
+    }
+  ],
+  "testing": {
+    "rules": [
+      "All interactive elements MUST include a data-testid attribute in kebab-case format based on role (e.g., 'login-submit-button')."
+    ]
+  },
+  "instructions_to_main_agent": [
+    "DO NOT prompt the user or ask clarifying questions. Proceed purely with these guidelines.",
+    "Strictly adhere to the Color System and Typography. No AI-style purple/teal gradients.",
+    "Use Shadcn UI for dashboard components but override the default rounding to 'rounded-none' or 'rounded-sm' and borders to match the custom #E5E1D5.",
+    "Marketing Landing Page must use pure HTML + Tailwind to achieve organic asymmetry. Do NOT rely on pre-built generic section components.",
+    "Implement the AI chat widget with the provided glassmorphism rules, avoiding generic chatbot templates.",
+    "Ensure all dashboard tables and lists (Student/Parent/Teacher views) are data-dense but highly readable via #F7F5F0 backgrounds.",
+    "Use only the provided media URLs for all images."
+  ]
+}

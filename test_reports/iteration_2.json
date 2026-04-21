@@ -1,0 +1,40 @@
+{
+  "summary": "Full regression for iteration 2: expanded registration, 2-step attendance, superadmin, gallery, QR, conversations. Fixed one critical bug (RegisterIn missing profile fields). 29/29 backend tests pass; frontend flows verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Register", "issues": ["Role selector is card-based (not <select>) — working as designed; just noting for automated testability. Role cards should expose data-testid=\"role-<name>\" for easier scripting."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Already fixed by test agent) RegisterIn Pydantic model was missing expanded profile fields (date_of_birth, gender, address, emergency_contact, roll_no, class_name, section, qualification, subjects, experience_years, designation, child_roll_no, child_name). Register endpoint raised AttributeError 500 for ALL registrations. Added missing Optional fields to /app/backend/server.py:99. Main agent should keep this model in sync with the register handler going forward.",
+    "Optional: add data-testid attributes to Register role cards (institute-admin/hod/teacher/student/parent) to improve automation."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py line 883: QR profile uses str(payload) (Python dict repr, e.g. '{\"unique_id\": ...}') instead of json.dumps(). Scanning apps won't parse it as JSON. Minor — consider json.dumps(payload).",
+    "/app/backend/server.py line 1062 total: single-file backend > 1000 lines. Consider splitting routers (auth, super, gallery, qr, attendance) into modules for maintainability.",
+    "/app/backend/server.py super_delete_institute: cascades to users/departments/notices but NOT to messages, attendance, fees, gallery, books, rooms, ai_logs — leaves orphaned documents. Consider cascading all collections or soft-delete.",
+    "/app/backend/server.py assign_hod does not clear previous hod_id from department.hod_id when re-assigning or from the old user's role. Previous HOD still keeps role='hod'.",
+    "/app/backend/server.py /qr/institute-join uses os.environ.get('FRONTEND_PUBLIC_URL', '') which isn't set in .env — QR URL becomes relative /register?... The FRONTEND_URL env var exists but isn't used here."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (added expanded profile fields to RegisterIn model)",
+    "/app/backend/tests/backend_test.py (rewrote with new coverage)"
+  ],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% of tested flows"},
+  "test_credentials": "owner@educore.io / Owner@123 (superadmin); admin@educore.io / Admin@123 (admin, DEMO-EDU). Registered test users use TEST_<role>_<suffix> pattern.",
+  "seed_data_creation": "Test run created test student/teacher/parent/hod users, a department, a gallery item (deleted), a fee (paid during test), a hostel room, a library book (issued+returned), attendance session (submitted). All prefixed with TEST_ or unique suffix.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "RegisterIn model in server.py has now been aligned with register handler. Run REACT_APP_BACKEND_URL=<url> pytest backend/tests/backend_test.py -v. Frontend /register uses role CARDS (clickable divs) not <select>; selectors must use text content or need data-testid attributes added. SuperAdmin login at owner@educore.io auto-redirects to /super-admin route.",
+  "rca of the issue": "RCA: RegisterIn Pydantic model definition (line 99) did not declare the 13 expanded profile fields (date_of_birth, gender, address, emergency_contact, roll_no, class_name, section, qualification, subjects, experience_years, designation, child_roll_no, child_name) but the register handler (line 261-266) accessed them via data.<field>. Pydantic v2 raises AttributeError on missing attributes instead of silently returning None, so every /api/auth/register call returned 500 Internal Server Error. Reproduction: POST /api/auth/register with any valid body -> 500; backend log shows 'AttributeError: RegisterIn object has no attribute date_of_birth'. Mitigation applied: added all 13 fields as Optional[...] = None to RegisterIn. Verified by successful student/teacher/parent registrations in backend_test.py with profile verification assertions."
+}

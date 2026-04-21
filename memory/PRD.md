@@ -19,6 +19,13 @@ Build a scalable SaaS-based web platform for managing educational institutions (
 6. **Parent** — child's attendance, fees, messages teachers/HOD.
 
 ## Implemented (2026-04-20 → 2026-04-21)
+- **Tiered Subscriptions (Iteration 3)**: Stripe checkout integration with Free ($0), Pro ($49/mo), Enterprise ($299/mo) plans.
+  - Public `/pricing` page, `Billing & Plan` panel in admin dashboard, `/billing/success` polling page.
+  - Server-side plan definitions (price manipulation impossible from frontend).
+  - `payment_transactions` collection for idempotent tracking.
+  - Webhook endpoint `/api/webhook/stripe` with signature verification.
+  - SuperAdmin revenue analytics: MRR, ARR, conversion rate, lifetime revenue, plan distribution, transactions & subscriptions tabs.
+  - Graceful retry on Stripe propagation delays (polling returns `pending` instead of 500).
 - **Auth + Multi-role**: JWT Bearer + cookie; 6 roles incl. superadmin; unique ID like STU-XXXXXX issued at signup.
 - **Expanded Registration**: DOB, gender, address, emergency contact; role-specific (roll_no/class/section for student; qualification/subjects/experience for teacher/HOD; designation for admin/HOD; child details for parent). Pre-fill institute_code from URL (for QR join flow).
 - **Institute & Department CRUD**: Create/update/delete (admin), assign HOD (demotes previous HOD to teacher).

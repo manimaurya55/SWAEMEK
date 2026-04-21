@@ -998,7 +998,12 @@ async def checkout_status(session_id: str, request: Request, user: dict = Depend
     host_url = str(request.base_url)
     webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=os.environ["STRIPE_API_KEY"], webhook_url=webhook_url)
-    status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+    try:
+        status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+    except Exception as e:
+        # Session may not yet be retrievable immediately after creation; let the poller retry.
+        logger.warning(f"checkout_status transient error: {e}")
+        return {"status": "open", "payment_status": "pending", "amount_total": 0, "currency": "usd", "metadata": {}, "transient": True}
 
     # Update the payment record (idempotent)
     existing = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})

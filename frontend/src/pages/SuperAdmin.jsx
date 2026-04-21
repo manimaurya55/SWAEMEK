@@ -87,10 +87,10 @@ export default function SuperAdmin() {
         {stats && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8" data-testid="revenue-cards">
-              <div className="card-flat p-6 bg-[#1A362D] text-white">
-                <div className="overline !text-white/70 flex items-center gap-2"><DollarSign className="w-3 h-3"/> MRR</div>
-                <div className="font-serif text-4xl font-black mt-3">${stats.mrr?.toLocaleString()}</div>
-                <div className="text-xs text-white/70 mt-2">${stats.arr?.toLocaleString()} ARR · {stats.paying_institutes} paying</div>
+              <div className="card-flat p-6" style={{background:'#1A362D', color:'#fff'}}>
+                <div className="overline flex items-center gap-2" style={{color:'rgba(255,255,255,0.7)'}}><DollarSign className="w-3 h-3"/> MRR</div>
+                <div className="font-serif text-4xl font-black mt-3" style={{color:'#fff'}}>${stats.mrr?.toLocaleString()}</div>
+                <div className="text-xs mt-2" style={{color:'rgba(255,255,255,0.7)'}}>${stats.arr?.toLocaleString()} ARR · {stats.paying_institutes} paying</div>
               </div>
               <div className="card-flat p-6">
                 <div className="overline flex items-center gap-2"><TrendingUp className="w-3 h-3"/> Conversion</div>

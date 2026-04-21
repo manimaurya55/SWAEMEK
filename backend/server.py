@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, EmailStr
 import pdfplumber
 import qrcode
 import base64
+import json
 
 # ============ DB ============
 mongo_url = os.environ["MONGO_URL"]
@@ -396,6 +397,13 @@ async def assign_hod(dep_id: str, user_id: str, user: dict = Depends(require_rol
     target = await db.users.find_one({"id": user_id, "institute_id": user["institute_id"]})
     if not target:
         raise HTTPException(404, "User not found")
+    dept = await db.departments.find_one({"id": dep_id, "institute_id": user["institute_id"]})
+    if not dept:
+        raise HTTPException(404, "Department not found")
+    # Demote previous HOD back to teacher role
+    prev_hod_id = dept.get("hod_id")
+    if prev_hod_id and prev_hod_id != user_id:
+        await db.users.update_one({"id": prev_hod_id}, {"$set": {"role": "teacher"}})
     await db.users.update_one({"id": user_id}, {"$set": {"role": "hod", "department_id": dep_id}})
     await db.departments.update_one({"id": dep_id}, {"$set": {"hod_id": user_id}})
     return {"ok": True}
@@ -880,7 +888,7 @@ async def qr_profile(user: dict = Depends(get_current_user)):
         "role": user["role"],
         "institute_code": inst.get("code") if inst else None,
     }
-    data_str = "EDUCORE::" + str(payload)
+    data_str = "EDUCORE::" + json.dumps(payload)
     return {"qr": make_qr_base64(data_str), "payload": payload}
 
 
@@ -890,7 +898,9 @@ async def qr_institute_join(user: dict = Depends(require_roles("admin", "hod", "
     inst = await db.institutes.find_one({"id": user["institute_id"]}, {"_id": 0})
     if not inst:
         raise HTTPException(404, "Institute not found")
-    frontend = os.environ.get("FRONTEND_PUBLIC_URL", "")
+    frontend = os.environ.get("FRONTEND_PUBLIC_URL") or os.environ.get("FRONTEND_URL", "")
+    if frontend in ("", "*"):
+        frontend = ""
     join_url = f"{frontend}/register?institute_code={inst['code']}" if frontend else f"/register?institute_code={inst['code']}"
     return {"qr": make_qr_base64(join_url), "url": join_url, "code": inst["code"]}
 

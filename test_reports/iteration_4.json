@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 4 (backend-only): AI credit-pack add-on. 15/15 new credit-pack tests PASS + 15/15 billing regression PASS + 29/29 core regression PASS (59/59 = 100%). All problem-statement requirements verified: GET /credit-pack (public, correct shape), /subscription exposes ai_used_this_month/ai_limit_monthly/ai_credits_remaining/plan_name, /checkout/credit-pack role-gates correctly (admin/hod 200, student/teacher/parent/super 403, unauth 401), payment_transactions row contains plan_id='credit_pack' + purchase_type='credit_pack' + credits=500, /checkout/status for credit_pack is idempotent on unpaid polls, /ai/ask returns used_credit boolean, ai_logs doc has used_credit field, limit-reached code path verified via inspection (blocked/limit_reached returned when used_month>=20 & credits<=0).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/ai/ask", "issue": "When LLM call raises (EMERGENT_LLM_KEY invalid / upstream error), handler returns HTTP 200 with {error: true, answer: 'AI service unavailable: ...'}. This leaks the exception message to the client and is not a distinct status code, so frontend cannot differentiate quota vs outage. Consider 503 with a clean error body."},
+      {"endpoint": "POST /api/ai/ask", "issue": "used_credit decrement happens AFTER LLM response. If ai_logs insert succeeds but the subsequent $inc fails, the counter drifts. Low risk but not transactional."},
+      {"endpoint": "POST /api/checkout/credit-pack", "issue": "No idempotency key / rate-limit — a client can call it in a loop and create many Stripe sessions (each persisted as a payment_transactions row). Iter-3 had the same pattern for /checkout/session."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_credit_pack.py",
+    "/app/backend/tests/test_billing.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/credit_pack_results.xml"
+  ],
+  "action_items": [
+    "Consider returning HTTP 503 (not 200 with error:true) from /api/ai/ask when the LLM upstream fails, so the frontend AI widget can show a distinct outage banner vs blocked/limit messages.",
+    "Wrap ai_logs.insert_one + subscriptions.$inc (credit decrement) in a single try block so a failed decrement does not leave a consumed log with uncharged credits — or swap the order (decrement first, then log).",
+    "server.py is now 1359 lines (grew ~100 lines since iter 3). Strong candidate for modularization: split billing (subscriptions/stripe/credit-pack), AI, and core CRUD into separate routers.",
+    "Consider adding an idempotency-key header on /api/checkout/credit-pack + /api/checkout/session to prevent runaway session creation from retrying clients."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py:825-890 — /ai/ask: 1) `used_month >= plan.limits.ai_queries` is computed twice (once for block-check, once for use_credit). Extract a local `over_plan = used_month >= plan_limit` var. 2) LLM exception path returns 200; should be 503.",
+    "/app/backend/server.py:1087-1096 — /checkout/status credit_pack branch: uses $setOnInsert with plan_id='free' on upsert. If a PRO sub is already active and the admin buys a credit pack, the upsert correctly avoids overwriting. Verified — safe.",
+    "/app/backend/server.py:1138-1146 — webhook credit_pack branch mirrors checkout/status; good symmetry but duplicate logic. Extract `apply_credit_pack(iid, credits_to_add)` helper.",
+    "/app/backend/server.py:241 — CreditPackCheckoutIn only has `origin_url: str`; consider adding a pydantic validator to ensure it's a valid URL (httpUrl).",
+    "/app/backend/server.py:822 — PRIVATE_KEYWORDS short-circuit before quota check (good — blocked private queries don't consume quota), confirmed by test_ai_ask_private_keyword_blocked_no_used_credit_change."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_credit_pack.py (new, 15 tests)"
+  ],
+  "success_rate": {"backend": "100% (59/59 — 15 new credit-pack + 15 billing regression + 29 core regression)", "frontend": "not tested (backend-only iteration)"},
+  "test_credentials": "admin@educore.io/Admin@123 (admin, DEMO-EDU); owner@educore.io/Owner@123 (superadmin). Fresh TEST_ users (student/teacher/parent/hod) registered per-run with SUFFIX.",
+  "seed_data_creation": "Created 2 Stripe credit-pack checkout sessions (admin + hod) with payment_status=pending, plan_id='credit_pack', credits=500, amount=$9.00. Registered 4 TEST_ users (student/teacher/parent/hod) with unique SUFFIX per run. 1-2 real /ai/ask calls made (non-blocking queries) — counter incremented by 1-2 within free 20/mo quota, did NOT exhaust it.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `REACT_APP_BACKEND_URL=https://campus-sync-15.preview.emergentagent.com pytest backend/tests/test_credit_pack.py backend/tests/test_billing.py backend/tests/backend_test.py -v`. All 59 tests pass. Free plan ai_limit_monthly=20 (PLANS['free'].limits.ai_queries). Each test run consumes ~2 AI queries of the shared DEMO-EDU quota — after ~8 runs you'll approach the limit; at that point the test_ai_ask_returns_used_credit_flag test auto-skips (`if ai_used >= ai_limit-1: pytest.skip`). The limit-reached live path was verified via code inspection in test_server_code_contains_limit_block — do not exhaust live quota. Frontend (BillingPanel credit-pack-card, AIAssistant ai-usage-bar, BillingSuccess credit_pack branch) was NOT tested this iteration per request.",
+  "rca of the issue": "No blocking issues this iteration. Minor concerns documented under action_items. Iter-3's /checkout/status 500 bug was fixed by wrapping the Stripe call in try/except and returning {status:'open', payment_status:'pending', transient:true} — confirmed by 4 status-endpoint tests now passing."
+}

@@ -1,32 +1,39 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Check, Crown, Zap, Sparkles, TrendingUp } from "lucide-react";
+import { Check, Crown, Zap, Sparkles, TrendingUp, Plus } from "lucide-react";
 
 export default function BillingPanel({ user }) {
   const [plans, setPlans] = useState([]);
   const [sub, setSub] = useState(null);
+  const [pack, setPack] = useState(null);
   const [loading, setLoading] = useState(null);
+  const [packLoading, setPackLoading] = useState(false);
   const canManage = user?.role === "admin";
+  const canBuyPack = ["admin","hod"].includes(user?.role);
 
   useEffect(() => {
     api.get("/plans").then(r=>setPlans(r.data));
     api.get("/subscription").then(r=>setSub(r.data)).catch(()=>{});
+    api.get("/credit-pack").then(r=>setPack(r.data)).catch(()=>{});
   }, []);
 
   const upgrade = async (planId) => {
     if (!canManage) { toast.error("Only Institute Admin can change plan"); return; }
     setLoading(planId);
     try {
-      const { data } = await api.post("/checkout/session", {
-        plan_id: planId,
-        origin_url: window.location.origin,
-      });
+      const { data } = await api.post("/checkout/session", { plan_id: planId, origin_url: window.location.origin });
       window.location.href = data.url;
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed to start checkout");
-      setLoading(null);
-    }
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); setLoading(null); }
+  };
+
+  const buyPack = async () => {
+    if (!canBuyPack) return;
+    setPackLoading(true);
+    try {
+      const { data } = await api.post("/checkout/credit-pack", { origin_url: window.location.origin });
+      window.location.href = data.url;
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); setPackLoading(false); }
   };
 
   const currentPlan = sub?.plan_id || "free";
@@ -89,6 +96,34 @@ export default function BillingPanel({ user }) {
 
       {!canManage && (
         <div className="card-flat p-6 text-sm text-[#5C5C5C]">Only Institute Admin can change the subscription plan.</div>
+      )}
+
+      {pack && (
+        <div className="card-flat p-8" data-testid="credit-pack-card">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="flex-1 min-w-[280px]">
+              <div className="overline flex items-center gap-2 text-[#D46B4E]"><Sparkles className="w-3 h-3"/> AI Credits</div>
+              <h3 className="font-serif text-3xl font-bold mt-2">{pack.name}</h3>
+              <p className="text-[#5C5C5C] mt-2 leading-relaxed max-w-xl">
+                Running low on AI queries this month? Top up with an instant one-time pack. Credits never expire and kick in automatically after your monthly plan allowance is used.
+              </p>
+              {sub && (
+                <div className="mt-4 flex gap-2 flex-wrap">
+                  <span className="badge-flat" data-testid="ai-used-badge">Used this month · {sub.ai_used_this_month || 0} / {sub.ai_limit_monthly}</span>
+                  <span className="badge-flat text-[#1A362D]" data-testid="ai-credits-badge">Credits · {sub.ai_credits_remaining || 0}</span>
+                </div>
+              )}
+            </div>
+            <div className="text-right">
+              <div className="font-serif text-4xl font-black">${pack.amount}</div>
+              <div className="text-xs text-[#5C5C5C] mt-1">for {pack.credits} queries</div>
+              <button onClick={buyPack} disabled={packLoading || !canBuyPack} className="btn-primary mt-4 whitespace-nowrap" data-testid="buy-credit-pack-btn">
+                <Plus className="w-4 h-4"/> {packLoading ? 'Redirecting…' : 'Buy credits'}
+              </button>
+              {!canBuyPack && <div className="text-xs text-[#5C5C5C] mt-2">Admin/HOD only</div>}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

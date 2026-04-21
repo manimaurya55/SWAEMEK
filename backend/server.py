@@ -234,6 +234,14 @@ class CheckoutIn(BaseModel):
     origin_url: str
 
 
+# Credit pack (one-time purchase to top up AI queries)
+CREDIT_PACK = {"id": "ai_pack_500", "name": "AI Pack · 500 queries", "credits": 500, "amount": 9.00, "currency": "usd"}
+
+
+class CreditPackCheckoutIn(BaseModel):
+    origin_url: str
+
+
 # ============ Helpers ============
 def public_user(u: dict) -> dict:
     return {k: v for k, v in u.items() if k not in ("password_hash", "_id")}
@@ -820,9 +828,19 @@ async def ai_ask(data: AIAskIn, user: dict = Depends(get_current_user)):
     if any(k in q_lower for k in PRIVATE_KEYWORDS):
         return {"answer": "I cannot share private or sensitive information (e.g., salaries, personal contact details, passwords). Please ask about public institute information.", "blocked": True}
 
-    # Gather PUBLIC context only
+    # Check plan limit
     iid = user["institute_id"]
-    inst = await db.institutes.find_one({"id": iid}, {"_id": 0, "admin_id": 0})
+    sub = await db.subscriptions.find_one({"institute_id": iid}) or {"plan_id": "free"}
+    plan = PLANS.get(sub.get("plan_id", "free"), PLANS["free"])
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    used_month = await db.ai_logs.count_documents({"institute_id": iid, "created_at": {"$gte": month_start}})
+    credits = int(sub.get("ai_credits_remaining", 0))
+    if used_month >= plan["limits"]["ai_queries"] and credits <= 0:
+        return {"answer": "Your institute has reached this month's AI query limit. Purchase an AI credit pack from Billing → AI Credits, or upgrade your plan.", "blocked": True, "limit_reached": True}
+    use_credit = used_month >= plan["limits"]["ai_queries"]
+
+    # Gather PUBLIC context only
+    inst = await db.institutes.find_one({"id": iid}, {"_id": 0, "admin_id": 0}) if user.get("institute_id") else None
     departments = await db.departments.find({"institute_id": iid}, {"_id": 0, "hod_id": 0}).to_list(50)
     notices = await db.notices.find({"institute_id": iid}, {"_id": 0, "author_id": 0}).sort("created_at", -1).to_list(10)
     teacher_count = await db.users.count_documents({"institute_id": iid, "role": "teacher"})
@@ -861,9 +879,15 @@ async def ai_ask(data: AIAskIn, user: dict = Depends(get_current_user)):
     await db.ai_logs.insert_one({
         "id": uid(), "user_id": user["id"], "institute_id": iid,
         "question": data.question, "answer": str(answer)[:2000],
+        "used_credit": use_credit,
         "created_at": now_iso(),
     })
-    return {"answer": answer, "blocked": False}
+    if use_credit:
+        await db.subscriptions.update_one(
+            {"institute_id": iid},
+            {"$inc": {"ai_credits_remaining": -1}, "$set": {"updated_at": now_iso()}},
+        )
+    return {"answer": answer, "blocked": False, "used_credit": use_credit}
 
 
 # ============ GALLERY ============
@@ -951,8 +975,54 @@ async def my_subscription(user: dict = Depends(get_current_user)):
         return {"plan_id": "free", "status": "n/a"}
     sub = await db.subscriptions.find_one({"institute_id": user["institute_id"]}, {"_id": 0})
     if not sub:
-        return {"plan_id": "free", "status": "active", "institute_id": user["institute_id"]}
+        sub = {"plan_id": "free", "status": "active", "institute_id": user["institute_id"]}
+    # Compute AI usage this month
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    ai_used_month = await db.ai_logs.count_documents({
+        "institute_id": user["institute_id"], "created_at": {"$gte": month_start}
+    })
+    plan = PLANS.get(sub.get("plan_id", "free"), PLANS["free"])
+    sub["ai_used_this_month"] = ai_used_month
+    sub["ai_limit_monthly"] = plan["limits"]["ai_queries"]
+    sub["ai_credits_remaining"] = sub.get("ai_credits_remaining", 0)
+    sub["plan_name"] = plan["name"]
     return sub
+
+
+@api.get("/credit-pack")
+async def credit_pack_info():
+    return CREDIT_PACK
+
+
+@api.post("/checkout/credit-pack")
+async def buy_credit_pack(data: CreditPackCheckoutIn, request: Request, user: dict = Depends(require_roles("admin", "hod"))):
+    if not user.get("institute_id"):
+        raise HTTPException(400, "No institute")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=os.environ["STRIPE_API_KEY"], webhook_url=webhook_url)
+
+    origin = data.origin_url.rstrip("/")
+    success_url = f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/dashboard"
+    metadata = {
+        "institute_id": user["institute_id"], "user_id": user["id"],
+        "purchase_type": "credit_pack", "credits": str(CREDIT_PACK["credits"]),
+    }
+    req = CheckoutSessionRequest(
+        amount=float(CREDIT_PACK["amount"]), currency=CREDIT_PACK["currency"],
+        success_url=success_url, cancel_url=cancel_url, metadata=metadata,
+    )
+    session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(req)
+    await db.payment_transactions.insert_one({
+        "id": uid(), "session_id": session.session_id,
+        "institute_id": user["institute_id"], "user_id": user["id"],
+        "plan_id": "credit_pack", "amount": CREDIT_PACK["amount"], "currency": CREDIT_PACK["currency"],
+        "credits": CREDIT_PACK["credits"],
+        "status": "initiated", "payment_status": "pending", "purchase_type": "credit_pack",
+        "metadata": metadata, "created_at": now_iso(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
 
 
 @api.post("/checkout/session")
@@ -1013,20 +1083,32 @@ async def checkout_status(session_id: str, request: Request, user: dict = Depend
         if status.payment_status == "paid":
             meta = existing.get("metadata") or status.metadata or {}
             institute_id = meta.get("institute_id") or existing.get("institute_id")
-            plan_id = meta.get("plan_id") or existing.get("plan_id")
-            if institute_id and plan_id:
-                now_ts = datetime.now(timezone.utc)
+            purchase_type = meta.get("purchase_type") or existing.get("purchase_type")
+            if purchase_type == "credit_pack":
+                # Top up credits
+                credits_to_add = int(meta.get("credits") or existing.get("credits") or CREDIT_PACK["credits"])
                 await db.subscriptions.update_one(
                     {"institute_id": institute_id},
-                    {"$set": {
-                        "institute_id": institute_id, "plan_id": plan_id,
-                        "status": "active", "current_period_start": now_ts.isoformat(),
-                        "current_period_end": (now_ts + timedelta(days=30)).isoformat(),
-                        "amount": PLANS[plan_id]["amount"], "currency": PLANS[plan_id]["currency"],
-                        "last_session_id": session_id, "updated_at": now_iso(),
-                    }},
+                    {"$inc": {"ai_credits_remaining": credits_to_add},
+                     "$setOnInsert": {"plan_id": "free", "status": "active", "institute_id": institute_id, "created_at": now_iso()},
+                     "$set": {"updated_at": now_iso()}},
                     upsert=True,
                 )
+            else:
+                plan_id = meta.get("plan_id") or existing.get("plan_id")
+                if institute_id and plan_id and plan_id in PLANS:
+                    now_ts = datetime.now(timezone.utc)
+                    await db.subscriptions.update_one(
+                        {"institute_id": institute_id},
+                        {"$set": {
+                            "institute_id": institute_id, "plan_id": plan_id,
+                            "status": "active", "current_period_start": now_ts.isoformat(),
+                            "current_period_end": (now_ts + timedelta(days=30)).isoformat(),
+                            "amount": PLANS[plan_id]["amount"], "currency": PLANS[plan_id]["currency"],
+                            "last_session_id": session_id, "updated_at": now_iso(),
+                        }},
+                        upsert=True,
+                    )
     return {"status": status.status, "payment_status": status.payment_status,
             "amount_total": status.amount_total, "currency": status.currency, "metadata": status.metadata}
 
@@ -1052,20 +1134,31 @@ async def stripe_webhook(request: Request):
             )
             meta = existing.get("metadata") or resp.metadata or {}
             iid = meta.get("institute_id") or existing.get("institute_id")
-            pid = meta.get("plan_id") or existing.get("plan_id")
-            if iid and pid:
-                now_ts = datetime.now(timezone.utc)
+            ptype = meta.get("purchase_type") or existing.get("purchase_type")
+            if ptype == "credit_pack" and iid:
+                credits_to_add = int(meta.get("credits") or existing.get("credits") or CREDIT_PACK["credits"])
                 await db.subscriptions.update_one(
                     {"institute_id": iid},
-                    {"$set": {
-                        "institute_id": iid, "plan_id": pid, "status": "active",
-                        "current_period_start": now_ts.isoformat(),
-                        "current_period_end": (now_ts + timedelta(days=30)).isoformat(),
-                        "amount": PLANS[pid]["amount"], "currency": PLANS[pid]["currency"],
-                        "last_session_id": resp.session_id, "updated_at": now_iso(),
-                    }},
+                    {"$inc": {"ai_credits_remaining": credits_to_add},
+                     "$setOnInsert": {"plan_id": "free", "status": "active", "institute_id": iid, "created_at": now_iso()},
+                     "$set": {"updated_at": now_iso()}},
                     upsert=True,
                 )
+            else:
+                pid = meta.get("plan_id") or existing.get("plan_id")
+                if iid and pid and pid in PLANS:
+                    now_ts = datetime.now(timezone.utc)
+                    await db.subscriptions.update_one(
+                        {"institute_id": iid},
+                        {"$set": {
+                            "institute_id": iid, "plan_id": pid, "status": "active",
+                            "current_period_start": now_ts.isoformat(),
+                            "current_period_end": (now_ts + timedelta(days=30)).isoformat(),
+                            "amount": PLANS[pid]["amount"], "currency": PLANS[pid]["currency"],
+                            "last_session_id": resp.session_id, "updated_at": now_iso(),
+                        }},
+                        upsert=True,
+                    )
     return {"ok": True}
 
 

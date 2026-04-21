@@ -24,6 +24,10 @@ import qrcode
 import base64
 import json
 
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
+)
+
 # ============ DB ============
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -212,6 +216,22 @@ class GalleryIn(BaseModel):
     caption: Optional[str] = None
     category: Optional[str] = "general"  # general, events, sports, department
     department_id: Optional[str] = None
+
+
+# ============ SUBSCRIPTION PLANS (server-side defined) ============
+PLANS = {
+    "free": {"name": "Free", "amount": 0.00, "currency": "usd", "interval": "month",
+             "limits": {"users": 50, "ai_queries": 20, "departments": 3}, "features": ["Basic modules", "50 users", "20 AI queries/mo"]},
+    "pro": {"name": "Pro", "amount": 49.00, "currency": "usd", "interval": "month",
+            "limits": {"users": 2000, "ai_queries": 2000, "departments": 50}, "features": ["All modules", "2,000 users", "2,000 AI queries/mo", "Priority support"]},
+    "enterprise": {"name": "Enterprise", "amount": 299.00, "currency": "usd", "interval": "month",
+                   "limits": {"users": 999999, "ai_queries": 999999, "departments": 999}, "features": ["Unlimited users", "Unlimited AI", "Dedicated success manager", "Custom SLA"]},
+}
+
+
+class CheckoutIn(BaseModel):
+    plan_id: str  # "pro" or "enterprise"
+    origin_url: str
 
 
 # ============ Helpers ============
@@ -919,12 +939,152 @@ async def qr_fee(fee_id: str, user: dict = Depends(get_current_user)):
     return {"qr": make_qr_base64(payload), "amount": fee["amount"], "description": fee["description"], "upi_payload": payload}
 
 
+# ============ SUBSCRIPTIONS / STRIPE ============
+@api.get("/plans")
+async def list_plans():
+    return [{"id": k, **v} for k, v in PLANS.items()]
+
+
+@api.get("/subscription")
+async def my_subscription(user: dict = Depends(get_current_user)):
+    if not user.get("institute_id"):
+        return {"plan_id": "free", "status": "n/a"}
+    sub = await db.subscriptions.find_one({"institute_id": user["institute_id"]}, {"_id": 0})
+    if not sub:
+        return {"plan_id": "free", "status": "active", "institute_id": user["institute_id"]}
+    return sub
+
+
+@api.post("/checkout/session")
+async def create_checkout(data: CheckoutIn, request: Request, user: dict = Depends(require_roles("admin"))):
+    plan = PLANS.get(data.plan_id)
+    if not plan or data.plan_id == "free":
+        raise HTTPException(400, "Invalid plan")
+    if not user.get("institute_id"):
+        raise HTTPException(400, "No institute")
+
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=os.environ["STRIPE_API_KEY"], webhook_url=webhook_url)
+
+    origin = data.origin_url.rstrip("/")
+    success_url = f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/dashboard"
+
+    metadata = {
+        "institute_id": user["institute_id"],
+        "user_id": user["id"],
+        "plan_id": data.plan_id,
+    }
+    req = CheckoutSessionRequest(
+        amount=float(plan["amount"]), currency=plan["currency"],
+        success_url=success_url, cancel_url=cancel_url, metadata=metadata,
+    )
+    session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(req)
+
+    # Record payment transaction (pending)
+    await db.payment_transactions.insert_one({
+        "id": uid(), "session_id": session.session_id,
+        "institute_id": user["institute_id"], "user_id": user["id"],
+        "plan_id": data.plan_id, "amount": plan["amount"], "currency": plan["currency"],
+        "status": "initiated", "payment_status": "pending",
+        "metadata": metadata, "created_at": now_iso(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
+
+
+@api.get("/checkout/status/{session_id}")
+async def checkout_status(session_id: str, request: Request, user: dict = Depends(get_current_user)):
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=os.environ["STRIPE_API_KEY"], webhook_url=webhook_url)
+    status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+
+    # Update the payment record (idempotent)
+    existing = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    if existing and existing.get("payment_status") != "paid":
+        upd = {"status": status.status, "payment_status": status.payment_status, "updated_at": now_iso()}
+        await db.payment_transactions.update_one({"session_id": session_id}, {"$set": upd})
+        if status.payment_status == "paid":
+            meta = existing.get("metadata") or status.metadata or {}
+            institute_id = meta.get("institute_id") or existing.get("institute_id")
+            plan_id = meta.get("plan_id") or existing.get("plan_id")
+            if institute_id and plan_id:
+                now_ts = datetime.now(timezone.utc)
+                await db.subscriptions.update_one(
+                    {"institute_id": institute_id},
+                    {"$set": {
+                        "institute_id": institute_id, "plan_id": plan_id,
+                        "status": "active", "current_period_start": now_ts.isoformat(),
+                        "current_period_end": (now_ts + timedelta(days=30)).isoformat(),
+                        "amount": PLANS[plan_id]["amount"], "currency": PLANS[plan_id]["currency"],
+                        "last_session_id": session_id, "updated_at": now_iso(),
+                    }},
+                    upsert=True,
+                )
+    return {"status": status.status, "payment_status": status.payment_status,
+            "amount_total": status.amount_total, "currency": status.currency, "metadata": status.metadata}
+
+
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: Request):
+    body = await request.body()
+    sig = request.headers.get("Stripe-Signature", "")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=os.environ["STRIPE_API_KEY"], webhook_url=webhook_url)
+    try:
+        resp = await stripe_checkout.handle_webhook(body, sig)
+    except Exception as e:
+        logger.exception("Webhook err")
+        raise HTTPException(400, f"Webhook error: {e}")
+    if resp.payment_status == "paid" and resp.session_id:
+        existing = await db.payment_transactions.find_one({"session_id": resp.session_id})
+        if existing and existing.get("payment_status") != "paid":
+            await db.payment_transactions.update_one(
+                {"session_id": resp.session_id},
+                {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now_iso()}},
+            )
+            meta = existing.get("metadata") or resp.metadata or {}
+            iid = meta.get("institute_id") or existing.get("institute_id")
+            pid = meta.get("plan_id") or existing.get("plan_id")
+            if iid and pid:
+                now_ts = datetime.now(timezone.utc)
+                await db.subscriptions.update_one(
+                    {"institute_id": iid},
+                    {"$set": {
+                        "institute_id": iid, "plan_id": pid, "status": "active",
+                        "current_period_start": now_ts.isoformat(),
+                        "current_period_end": (now_ts + timedelta(days=30)).isoformat(),
+                        "amount": PLANS[pid]["amount"], "currency": PLANS[pid]["currency"],
+                        "last_session_id": resp.session_id, "updated_at": now_iso(),
+                    }},
+                    upsert=True,
+                )
+    return {"ok": True}
+
+
 # ============ SUPER ADMIN (Platform Owner) ============
 @api.get("/super/stats")
 async def super_stats(user: dict = Depends(require_roles("superadmin"))):
     total_users = await db.users.count_documents({})
+    # Revenue analytics
+    subs = await db.subscriptions.find({"status": "active"}, {"_id": 0}).to_list(5000)
+    mrr = sum(s.get("amount", 0) for s in subs if s.get("plan_id") != "free")
+    plan_distribution = {"free": 0, "pro": 0, "enterprise": 0}
+    total_institutes = await db.institutes.count_documents({})
+    paying = 0
+    for s in subs:
+        pid = s.get("plan_id", "free")
+        if pid in plan_distribution:
+            plan_distribution[pid] += 1
+        if pid != "free":
+            paying += 1
+    plan_distribution["free"] = max(0, total_institutes - paying)
+    paid_txns = await db.payment_transactions.find({"payment_status": "paid"}, {"_id": 0}).to_list(10000)
+    lifetime_revenue = sum(t.get("amount", 0) for t in paid_txns)
     return {
-        "institutes": await db.institutes.count_documents({}),
+        "institutes": total_institutes,
         "blocked_institutes": await db.institutes.count_documents({"blocked": True}),
         "users_total": total_users,
         "admins": await db.users.count_documents({"role": "admin"}),
@@ -935,7 +1095,36 @@ async def super_stats(user: dict = Depends(require_roles("superadmin"))):
         "notices": await db.notices.count_documents({}),
         "messages": await db.messages.count_documents({}),
         "ai_queries": await db.ai_logs.count_documents({}),
+        # Revenue
+        "mrr": round(mrr, 2),
+        "arr": round(mrr * 12, 2),
+        "paying_institutes": paying,
+        "conversion_rate": round((paying / total_institutes * 100) if total_institutes else 0, 1),
+        "lifetime_revenue": round(lifetime_revenue, 2),
+        "plan_distribution": plan_distribution,
+        "transactions_count": len(paid_txns),
     }
+
+
+@api.get("/super/transactions")
+async def super_transactions(user: dict = Depends(require_roles("superadmin"))):
+    txns = await db.payment_transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return txns
+
+
+@api.get("/super/subscriptions")
+async def super_subscriptions(user: dict = Depends(require_roles("superadmin"))):
+    subs = await db.subscriptions.find({}, {"_id": 0}).to_list(2000)
+    # enrich with institute name
+    iids = list({s["institute_id"] for s in subs if s.get("institute_id")})
+    if iids:
+        ins = await db.institutes.find({"id": {"$in": iids}}, {"_id": 0}).to_list(2000)
+        by_id = {i["id"]: i for i in ins}
+        for s in subs:
+            inst = by_id.get(s["institute_id"], {})
+            s["institute_name"] = inst.get("name")
+            s["institute_code"] = inst.get("code")
+    return subs
 
 
 @api.get("/super/institutes")

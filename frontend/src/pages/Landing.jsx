@@ -20,6 +20,7 @@ export default function Landing() {
           <nav className="hidden md:flex items-center gap-10 text-sm">
             <a href="#features" className="hover:text-[#1A362D]">Modules</a>
             <a href="#roles" className="hover:text-[#1A362D]">For Roles</a>
+            <Link to="/pricing" className="hover:text-[#1A362D]" data-testid="nav-pricing-link">Pricing</Link>
             <a href="#about" className="hover:text-[#1A362D]">About</a>
           </nav>
           <div className="flex items-center gap-3">

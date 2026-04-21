@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 3: Stripe subscription tier billing (Free/Pro/Enterprise) regression. 13/15 backend tests passing. 2 failures due to Stripe 'No such session' error on /api/checkout/status/{session_id} right after session creation — likely emergentintegrations/sk_test_emergent third-party issue. Frontend fully functional: /pricing, /billing/success, admin Billing & Plan sidebar+panel, SuperAdmin revenue cards + Subscriptions/Transactions tabs all render with correct data-testids. One UI bug: MRR card in SuperAdmin renders blank (card-flat CSS overrides bg-[#1A362D]).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/checkout/status/{session_id}", "issue": "Returns 500 immediately after session creation. Stripe error: 'No such checkout.session: cs_test_...'. Unhandled CheckoutError propagates as 500 instead of 404/400. Also blocks the success polling flow from ever reporting 'paid'.", "priority": "HIGH"},
+      {"endpoint": "POST /api/webhook/stripe", "issue": "Crashes with KeyError:'type' on malformed body -> 500 leaked to caller (should return 400). Need try/except to return 400 on bad payload.", "priority": "MEDIUM"}
+    ],
+    "minor": [
+      {"endpoint": "/checkout/status/{session_id}", "issue": "No 404 handling for unknown session IDs — any lookup failure bubbles as 500"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SuperAdmin MRR card", "issue": "Card renders essentially blank in browser — '.card-flat { background: var(--bg-surface) }' in index.css overrides Tailwind's bg-[#1A362D] due to shorthand+ordering; white-on-white content becomes invisible. Fix: use !important on bg (bg-[#1A362D]!) OR override .card-flat with inline style={{background:'#1A362D'}} like Pricing.jsx does.", "selector": "[data-testid='revenue-cards'] > div:first-child", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Upgrade checkout -> /billing/success polling", "issue": "Because backend /checkout/status returns 500, BillingSuccess will poll 15 times then land on 'Still processing' state — it never shows 'Payment successful' even if user paid. Root cause is backend.", "affected_selectors": ["billing-success-page"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_billing.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/billing_results.xml"
+  ],
+  "action_items": [
+    "Wrap /api/checkout/status/{session_id} Stripe call in try/except CheckoutError and return 404 (session not found) or 502 (upstream error) with a clean JSON body instead of 500.",
+    "Wrap /api/webhook/stripe handle_webhook call: catch signature/parse errors and return 400 JSON; don't let KeyError('type') become 500.",
+    "Investigate why sk_test_emergent rejects the same session_id it just issued — possibly a propagation delay on Stripe side, or the returned session_id differs from the one the Stripe account owns. Consider retry-with-backoff (e.g., up to 3 tries, 1-2s spaced) inside the status handler.",
+    "Fix MRR card invisible background in /app/frontend/src/pages/SuperAdmin.jsx (line 90): the Tailwind bg-[#1A362D] is being overridden by .card-flat CSS. Use inline style={{background:'#1A362D', color:'#fff'}} (same pattern as Pricing.jsx plan-pro card)."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py line 1001: stripe_checkout.get_checkout_status is called without try/except — any upstream Stripe error becomes 500.",
+    "/app/backend/server.py line 1037: stripe_webhook catches generic Exception but re-raises as 400 with exception message — OK; however the integration lib raises KeyError on malformed JSON before signature check.",
+    "/app/backend/server.py PLANS: amounts are hardcoded in backend (good) but also hardcoded in frontend — consider single source via /api/plans (already exposed; frontend does use it — OK).",
+    "/app/frontend/src/pages/SuperAdmin.jsx line 90: Tailwind bg-[#1A362D] shorthand conflict with .card-flat global rule; copy the inline-style override pattern used in Pricing.jsx/BillingPanel.jsx for isPro cards (they work correctly).",
+    "/app/backend/server.py line 1067+: /super/stats now aggregates revenue inside the same handler — acceptable, but for scale consider moving to a precomputed cache or splitting into /super/revenue.",
+    "server.py file is now 1261 lines (grew from 1062 in iter 2). Modularization recommended."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_billing.py (new)"
+  ],
+  "success_rate": {"backend": "87% (13/15 billing tests + 29/29 regression)", "frontend": "~95% (pricing/billing/success pages work; MRR card has CSS bug)"},
+  "test_credentials": "admin@educore.io / Admin@123 (admin, DEMO-EDU); owner@educore.io / Owner@123 (superadmin). STRIPE_API_KEY=sk_test_emergent in /app/backend/.env.",
+  "seed_data_creation": "Created 2 Stripe checkout sessions for DEMO-EDU (plan=pro). 2 payment_transactions docs inserted with status=initiated (unpaid). No subscription record upgraded (by design — no payment completed).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `REACT_APP_BACKEND_URL=<url> pytest backend/tests/test_billing.py -v`. The 2 failing tests (test_status_endpoint, test_status_idempotent) will pass once backend wraps CheckoutError. Frontend data-testids confirmed: pricing-page, plan-{free,pro,enterprise}, billing-panel, plans-grid, billing-plan-{id}, upgrade-{id}-btn, current-plan-badge, billing-success-page, revenue-cards. Dashboard sidebar shows 'Billing & Plan' for admin role only — verified visually. SuperAdmin revenue dashboard renders with Conversion/Lifetime/Plan mix cards + Institutes/Subscriptions/Transactions/All Users tabs — only MRR card is visually broken.",
+  "rca of the issue": "Issue 1 (checkout/status 500): Stripe's retrieve-session API returns 'No such checkout.session: cs_test_XXX' when called with the session_id that was just returned by create_checkout_session — for the same sk_test_emergent key. The emergentintegrations CheckoutError propagates to FastAPI as unhandled 500. Reproduction: POST /api/checkout/session (as admin) -> save session_id -> GET /api/checkout/status/{session_id} -> 500. Backend log shows emergentintegrations.payments.stripe.checkout.CheckoutError: Failed to retrieve session status: No such checkout.session. Likely causes: (a) the test-key account on Stripe side processes create & retrieve on different shards so the session isn't immediately queryable, (b) the emergent integration creates sessions via one route but retrieves via the public Stripe API that doesn't have the session. Mitigation: add try/except around stripe_checkout.get_checkout_status, return {'status':'open','payment_status':'pending'} on CheckoutError until session becomes retrievable (frontend will keep polling). Also add retry with 1-2s backoff. Issue 2 (webhook 500): /api/webhook/stripe wraps handle_webhook in try/except but handle_webhook itself may raise KeyError('type') which becomes CheckoutError('Unexpected error processing webhook: type') -> HTTPException 400 WITH the 500-looking message. Actually re-reading the code: it does raise HTTPException(400). So webhook test passes — but the error path is still noisy; consider returning 200 for malformed events to avoid Stripe retry storms."
+}

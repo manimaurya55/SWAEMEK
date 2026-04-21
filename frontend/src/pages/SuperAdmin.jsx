@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Shield, LogOut, Building2, Users, Ban, CheckCircle2, Trash2, Search } from "lucide-react";
+import { Shield, LogOut, Building2, Users, Ban, CheckCircle2, Trash2, Search, DollarSign, TrendingUp, CreditCard } from "lucide-react";
 
 export default function SuperAdmin() {
   const { user, loading, logout } = useAuth();
@@ -11,6 +11,8 @@ export default function SuperAdmin() {
   const [stats, setStats] = useState(null);
   const [institutes, setInstitutes] = useState([]);
   const [users, setUsers] = useState([]);
+  const [subs, setSubs] = useState([]);
+  const [txns, setTxns] = useState([]);
   const [tab, setTab] = useState("institutes");
   const [search, setSearch] = useState("");
 
@@ -83,36 +85,101 @@ export default function SuperAdmin() {
         </div>
 
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {[
-              { k: "Institutes", v: stats.institutes },
-              { k: "Blocked", v: stats.blocked_institutes, color: "text-[#B4442A]" },
-              { k: "Total users", v: stats.users_total },
-              { k: "Admins", v: stats.admins },
-              { k: "Teachers", v: stats.teachers },
-              { k: "Students", v: stats.students },
-              { k: "Parents", v: stats.parents },
-              { k: "HODs", v: stats.hods },
-              { k: "Notices", v: stats.notices },
-              { k: "Messages", v: stats.messages },
-              { k: "AI queries", v: stats.ai_queries, color: "text-[#D46B4E]" },
-            ].map((s,i)=>(
-              <div key={i} className="card-flat p-5" data-testid={`super-stat-${s.k.toLowerCase().replace(/\s+/g,'-')}`}>
-                <div className="overline">{s.k}</div>
-                <div className={`font-serif text-3xl font-bold mt-2 ${s.color||''}`}>{s.v}</div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8" data-testid="revenue-cards">
+              <div className="card-flat p-6 bg-[#1A362D] text-white">
+                <div className="overline !text-white/70 flex items-center gap-2"><DollarSign className="w-3 h-3"/> MRR</div>
+                <div className="font-serif text-4xl font-black mt-3">${stats.mrr?.toLocaleString()}</div>
+                <div className="text-xs text-white/70 mt-2">${stats.arr?.toLocaleString()} ARR · {stats.paying_institutes} paying</div>
               </div>
-            ))}
-          </div>
+              <div className="card-flat p-6">
+                <div className="overline flex items-center gap-2"><TrendingUp className="w-3 h-3"/> Conversion</div>
+                <div className="font-serif text-4xl font-black mt-3 text-[#D46B4E]">{stats.conversion_rate}%</div>
+                <div className="text-xs text-[#5C5C5C] mt-2">free → paid · {stats.paying_institutes}/{stats.institutes}</div>
+              </div>
+              <div className="card-flat p-6">
+                <div className="overline flex items-center gap-2"><CreditCard className="w-3 h-3"/> Lifetime revenue</div>
+                <div className="font-serif text-4xl font-black mt-3">${stats.lifetime_revenue?.toLocaleString()}</div>
+                <div className="text-xs text-[#5C5C5C] mt-2">{stats.transactions_count} transactions</div>
+              </div>
+              <div className="card-flat p-6">
+                <div className="overline">Plan mix</div>
+                <div className="text-sm mt-4 space-y-1">
+                  <div className="flex justify-between"><span>Free</span><b>{stats.plan_distribution?.free || 0}</b></div>
+                  <div className="flex justify-between"><span>Pro</span><b>{stats.plan_distribution?.pro || 0}</b></div>
+                  <div className="flex justify-between"><span>Enterprise</span><b>{stats.plan_distribution?.enterprise || 0}</b></div>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {[
+                { k: "Institutes", v: stats.institutes },
+                { k: "Blocked", v: stats.blocked_institutes, color: "text-[#B4442A]" },
+                { k: "Total users", v: stats.users_total },
+                { k: "Teachers", v: stats.teachers },
+                { k: "Students", v: stats.students },
+                { k: "Parents", v: stats.parents },
+                { k: "Notices", v: stats.notices },
+                { k: "Messages", v: stats.messages },
+                { k: "AI queries", v: stats.ai_queries, color: "text-[#D46B4E]" },
+              ].map((s,i)=>(
+                <div key={i} className="card-flat p-5" data-testid={`super-stat-${s.k.toLowerCase().replace(/\s+/g,'-')}`}>
+                  <div className="overline">{s.k}</div>
+                  <div className={`font-serif text-3xl font-bold mt-2 ${s.color||''}`}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
-        <div className="mt-12 flex gap-2 border-b border-[#E5E1D5]">
-          {[{id:"institutes", label:"Institutes"}, {id:"users", label:"All Users"}].map(t=>(
+        <div className="mt-12 flex gap-2 border-b border-[#E5E1D5] flex-wrap">
+          {[{id:"institutes", label:"Institutes"}, {id:"subscriptions", label:"Subscriptions"}, {id:"transactions", label:"Transactions"}, {id:"users", label:"All Users"}].map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} data-testid={`super-tab-${t.id}`}
               className={`px-5 py-3 text-sm font-medium border-b-2 transition ${tab===t.id?'border-[#1A362D] text-[#1A362D]':'border-transparent text-[#5C5C5C] hover:text-[#1A362D]'}`}>
               {t.label}
             </button>
           ))}
         </div>
+
+        {tab === "subscriptions" && (
+          <div className="mt-6 card-flat overflow-hidden" data-testid="subs-table">
+            <table>
+              <thead><tr><th>Institute</th><th>Plan</th><th>Amount</th><th>Status</th><th>Period end</th></tr></thead>
+              <tbody>
+                {subs.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-[#5C5C5C]">No active paid subscriptions yet.</td></tr>}
+                {subs.map(s=>(
+                  <tr key={s.institute_id} data-testid={`sub-${s.institute_id}`}>
+                    <td><div className="font-medium">{s.institute_name || '—'}</div><div className="text-xs text-[#5C5C5C]">{s.institute_code}</div></td>
+                    <td><span className="badge-flat capitalize">{s.plan_id}</span></td>
+                    <td>${s.amount?.toFixed(2)} {s.currency?.toUpperCase()}</td>
+                    <td><span className={`badge-flat ${s.status==='active'?'text-[#1A362D]':'text-[#B4442A]'}`}>{s.status}</span></td>
+                    <td className="text-sm text-[#5C5C5C]">{s.current_period_end ? new Date(s.current_period_end).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {tab === "transactions" && (
+          <div className="mt-6 card-flat overflow-hidden" data-testid="txns-table">
+            <table>
+              <thead><tr><th>Date</th><th>Session</th><th>Plan</th><th>Amount</th><th>Payment</th></tr></thead>
+              <tbody>
+                {txns.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-[#5C5C5C]">No transactions yet.</td></tr>}
+                {txns.map(t=>(
+                  <tr key={t.id}>
+                    <td className="text-sm text-[#5C5C5C]">{new Date(t.created_at).toLocaleString()}</td>
+                    <td className="font-mono text-xs">{t.session_id?.slice(-12)}</td>
+                    <td><span className="badge-flat capitalize">{t.plan_id}</span></td>
+                    <td>${t.amount?.toFixed(2)} {t.currency?.toUpperCase()}</td>
+                    <td><span className={`badge-flat ${t.payment_status==='paid'?'text-[#1A362D]':'text-[#B4442A]'}`}>{t.payment_status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {tab === "institutes" && (
           <div className="mt-6 card-flat overflow-hidden" data-testid="institutes-table">

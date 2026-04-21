@@ -6,6 +6,8 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
 import SuperAdmin from "@/pages/SuperAdmin";
+import Pricing from "@/pages/Pricing";
+import BillingSuccess from "@/pages/BillingSuccess";
 import { Toaster } from "sonner";
 
 function ProtectedRoute({ children }) {
@@ -24,6 +26,8 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/billing/success" element={<ProtectedRoute><BillingSuccess /></ProtectedRoute>} />
           <Route path="/dashboard/*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute><SuperAdmin /></ProtectedRoute>} />
         </Routes>

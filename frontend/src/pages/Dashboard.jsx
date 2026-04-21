@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, LogOut, Bell, LayoutGrid, Building2, Users, ClipboardList, Megaphone, MessageSquare, Home, Library as LibIcon, Wallet, FileUp, Sparkles, Image as ImageIcon, UserCircle } from "lucide-react";
+import { GraduationCap, LogOut, Bell, LayoutGrid, Building2, Users, ClipboardList, Megaphone, MessageSquare, Home, Library as LibIcon, Wallet, FileUp, Sparkles, Image as ImageIcon, UserCircle, CreditCard } from "lucide-react";
 import OverviewPanel from "@/components/dashboard/OverviewPanel";
 import DepartmentsPanel from "@/components/dashboard/DepartmentsPanel";
 import UsersPanel from "@/components/dashboard/UsersPanel";
@@ -16,6 +16,7 @@ import UploadPanel from "@/components/dashboard/UploadPanel";
 import AIAssistant from "@/components/dashboard/AIAssistant";
 import GalleryPanel from "@/components/dashboard/GalleryPanel";
 import ProfilePanel from "@/components/dashboard/ProfilePanel";
+import BillingPanel from "@/components/dashboard/BillingPanel";
 
 const MENU = [
   { id: "overview", label: "Overview", icon: LayoutGrid, roles: ["admin","hod","teacher","student","parent"] },
@@ -29,6 +30,7 @@ const MENU = [
   { id: "hostel", label: "Hostel & Mess", icon: Home, roles: ["admin","hod","teacher","student","parent"] },
   { id: "library", label: "Library", icon: LibIcon, roles: ["admin","hod","teacher","student","parent"] },
   { id: "fees", label: "Fees", icon: Wallet, roles: ["admin","hod","student","parent"] },
+  { id: "billing", label: "Billing & Plan", icon: CreditCard, roles: ["admin"] },
   { id: "upload", label: "PDF Import", icon: FileUp, roles: ["admin","hod"] },
 ];
 
@@ -67,6 +69,7 @@ export default function Dashboard() {
       case "hostel": return <HostelPanel user={user}/>;
       case "library": return <LibraryPanel user={user}/>;
       case "fees": return <FeesPanel user={user}/>;
+      case "billing": return <BillingPanel user={user}/>;
       case "upload": return <UploadPanel user={user}/>;
       default: return null;
     }

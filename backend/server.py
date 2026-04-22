@@ -7,6 +7,7 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import io
 import uuid
+import secrets
 import bcrypt
 import jwt as pyjwt
 import logging
@@ -131,8 +132,34 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None
+    unique_id: Optional[str] = None
     password: str
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str
+
+
+class ExamResultIn(BaseModel):
+    student_id: str
+    subject: str
+    exam_name: str  # e.g., "Mid-term", "Final"
+    term: Optional[str] = None
+    marks: float
+    total_marks: float = 100
+    grade: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class BulkPublishIn(BaseModel):
+    result_ids: List[str]
+    publish: bool = True
 
 
 class DepartmentIn(BaseModel):
@@ -263,6 +290,14 @@ def make_qr_base64(payload: str) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+async def next_unique_id(institute_code: str, role: str) -> str:
+    """Generate sequential unique ID like SWA-{INSTCODE}-{ROLE3}-{seq}"""
+    code = (institute_code or "XXX").replace("-", "").upper()[:8]
+    role3 = role.upper()[:3]
+    count = await db.users.count_documents({"unique_id": {"$regex": f"^SWA-{code}-{role3}-"}})
+    return f"SWA-{code}-{role3}-{str(count + 1).zfill(3)}"
+
+
 # ============ AUTH ============
 @api.post("/auth/register")
 async def register(data: RegisterIn, response: Response):
@@ -276,12 +311,18 @@ async def register(data: RegisterIn, response: Response):
 
     # handle institute
     institute_id = None
+    institute_code_resolved = None
     if data.role == "admin":
         if data.institute_code:
             inst = await db.institutes.find_one({"code": data.institute_code}, {"_id": 0})
             if not inst:
                 raise HTTPException(400, "Institute not found")
+            if inst.get("status") == "pending":
+                raise HTTPException(403, "This institute is pending verification by platform owner.")
+            if inst.get("blocked"):
+                raise HTTPException(403, "Institute is blocked.")
             institute_id = inst["id"]
+            institute_code_resolved = inst["code"]
         else:
             if not data.institute_name:
                 raise HTTPException(400, "institute_name required to create institute")
@@ -289,20 +330,25 @@ async def register(data: RegisterIn, response: Response):
             code = "INS-" + institute_id[:6].upper()
             await db.institutes.insert_one({
                 "id": institute_id, "name": data.institute_name, "code": code,
-                "admin_id": None, "blocked": False, "created_at": now_iso(),
+                "admin_id": None, "blocked": False, "status": "pending",
+                "created_at": now_iso(),
             })
+            institute_code_resolved = code
     else:
         if not data.institute_code:
             raise HTTPException(400, "institute_code is required")
         inst = await db.institutes.find_one({"code": data.institute_code}, {"_id": 0})
         if not inst:
             raise HTTPException(400, "Invalid institute code")
+        if inst.get("status") != "verified":
+            raise HTTPException(403, "This institute is not yet verified by platform. Please try later.")
         if inst.get("blocked"):
             raise HTTPException(403, "Institute is blocked. Contact platform support.")
         institute_id = inst["id"]
+        institute_code_resolved = inst["code"]
 
     user_id = uid()
-    unique_id = f"{data.role.upper()[:3]}-{user_id[:6].upper()}"
+    unique_id = await next_unique_id(institute_code_resolved, data.role)
     profile = {
         "date_of_birth": data.date_of_birth, "gender": data.gender,
         "address": data.address, "emergency_contact": data.emergency_contact,
@@ -340,13 +386,51 @@ async def register(data: RegisterIn, response: Response):
 
 @api.post("/auth/login")
 async def login(data: LoginIn, response: Response):
-    email = data.email.lower()
-    user = await db.users.find_one({"email": email})
+    if not data.email and not data.unique_id:
+        raise HTTPException(400, "Provide email or unique_id")
+    query = {}
+    if data.email:
+        query["email"] = data.email.lower()
+    else:
+        query["unique_id"] = data.unique_id.strip().upper()
+    user = await db.users.find_one(query)
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(401, "Invalid credentials")
     token = create_token(user["id"], user["role"])
     response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24 * 7, path="/")
     return {"user": public_user(user), "token": token}
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordIn):
+    user = await db.users.find_one({"email": data.email.lower()})
+    if not user:
+        # don't reveal existence
+        return {"ok": True, "message": "If the email exists, a reset token will be generated."}
+    token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.insert_one({
+        "id": uid(), "token": token, "user_id": user["id"], "email": user["email"],
+        "used": False, "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        "created_at": now_iso(),
+    })
+    # In dev, return token directly (no email service configured)
+    logger.info(f"Password reset token for {user['email']}: {token}")
+    return {"ok": True, "token": token, "message": "Use this token to reset password (dev-only response; in production this would be emailed)."}
+
+
+@api.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordIn):
+    rec = await db.password_reset_tokens.find_one({"token": data.token})
+    if not rec or rec.get("used"):
+        raise HTTPException(400, "Invalid or already used token")
+    expires_at = rec.get("expires_at")
+    if expires_at and datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
+        raise HTTPException(400, "Token expired")
+    if len(data.new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(data.new_password)}})
+    await db.password_reset_tokens.update_one({"token": data.token}, {"$set": {"used": True, "used_at": now_iso()}})
+    return {"ok": True}
 
 
 @api.post("/auth/logout")
@@ -874,7 +958,7 @@ async def ai_ask(data: AIAskIn, user: dict = Depends(get_current_user)):
         answer = await chat.send_message(UserMessage(text=prompt))
     except Exception as e:
         logger.exception("AI error")
-        return {"answer": f"AI service unavailable: {e}", "blocked": False, "error": True}
+        raise HTTPException(503, f"AI service unavailable: {e}")
 
     await db.ai_logs.insert_one({
         "id": uid(), "user_id": user["id"], "institute_id": iid,
@@ -1244,6 +1328,25 @@ async def super_users(role: Optional[str] = None, institute_id: Optional[str] = 
     return await db.users.find(q, {"_id": 0, "password_hash": 0}).to_list(2000)
 
 
+@api.post("/super/institutes/{iid}/verify")
+async def super_verify_institute(iid: str, user: dict = Depends(require_roles("superadmin"))):
+    inst = await db.institutes.find_one({"id": iid})
+    if not inst:
+        raise HTTPException(404, "Institute not found")
+    await db.institutes.update_one({"id": iid}, {"$set": {"status": "verified", "verified_at": now_iso(), "verified_by": user["id"]}})
+    # Notify the institute admin
+    if inst.get("admin_id"):
+        await create_notification([inst["admin_id"]], "Institute verified",
+            f"Your institute '{inst['name']}' has been verified. You can now invite members.", "system")
+    return {"ok": True}
+
+
+@api.post("/super/institutes/{iid}/reject")
+async def super_reject_institute(iid: str, user: dict = Depends(require_roles("superadmin"))):
+    await db.institutes.update_one({"id": iid}, {"$set": {"status": "rejected"}})
+    return {"ok": True}
+
+
 @api.post("/super/institutes/{iid}/block")
 async def super_block(iid: str, user: dict = Depends(require_roles("superadmin"))):
     await db.institutes.update_one({"id": iid}, {"$set": {"blocked": True}})
@@ -1269,6 +1372,78 @@ async def super_delete_institute(iid: str, user: dict = Depends(require_roles("s
 async def super_delete_user(uid_: str, user: dict = Depends(require_roles("superadmin"))):
     await db.users.delete_one({"id": uid_})
     return {"ok": True}
+
+
+# ============ EXAM RESULTS ============
+@api.post("/results")
+async def create_result(data: ExamResultIn, user: dict = Depends(require_roles("teacher", "hod", "admin"))):
+    student = await db.users.find_one({"id": data.student_id, "institute_id": user["institute_id"]})
+    if not student:
+        raise HTTPException(404, "Student not found")
+    percentage = round((data.marks / data.total_marks) * 100, 2) if data.total_marks else 0
+    grade = data.grade or ("A+" if percentage >= 90 else "A" if percentage >= 80 else "B" if percentage >= 70 else "C" if percentage >= 60 else "D" if percentage >= 40 else "F")
+    doc = {
+        "id": uid(), "institute_id": user["institute_id"],
+        "student_id": data.student_id, "student_name": student["name"],
+        "student_roll": (student.get("profile") or {}).get("roll_no"),
+        "subject": data.subject, "exam_name": data.exam_name, "term": data.term,
+        "marks": float(data.marks), "total_marks": float(data.total_marks),
+        "percentage": percentage, "grade": grade, "remarks": data.remarks,
+        "teacher_id": user["id"], "teacher_name": user["name"],
+        "published": False, "created_at": now_iso(),
+    }
+    await db.exam_results.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.get("/results")
+async def list_results(student_id: Optional[str] = None, exam_name: Optional[str] = None, published_only: bool = False, user: dict = Depends(get_current_user)):
+    q = {"institute_id": user["institute_id"]}
+    if student_id:
+        q["student_id"] = student_id
+    if exam_name:
+        q["exam_name"] = exam_name
+    # Students/parents only see published
+    if user["role"] in ("student", "parent"):
+        q["published"] = True
+        if user["role"] == "student":
+            q["student_id"] = user["id"]
+    elif published_only:
+        q["published"] = True
+    return await db.exam_results.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+
+@api.post("/results/publish")
+async def publish_results(data: BulkPublishIn, user: dict = Depends(require_roles("hod", "admin"))):
+    await db.exam_results.update_many(
+        {"id": {"$in": data.result_ids}, "institute_id": user["institute_id"]},
+        {"$set": {"published": data.publish, "published_at": now_iso() if data.publish else None}},
+    )
+    # Notify affected students
+    if data.publish:
+        recs = await db.exam_results.find({"id": {"$in": data.result_ids}}, {"student_id": 1, "exam_name": 1, "_id": 0}).to_list(1000)
+        student_ids = list({r["student_id"] for r in recs})
+        await create_notification(student_ids, "Exam results published", "Your exam results are now available in the Results tab.", "result")
+    return {"ok": True, "count": len(data.result_ids)}
+
+
+@api.delete("/results/{rid}")
+async def delete_result(rid: str, user: dict = Depends(require_roles("teacher", "hod", "admin"))):
+    await db.exam_results.delete_one({"id": rid, "institute_id": user["institute_id"]})
+    return {"ok": True}
+
+
+@api.get("/results/public/{institute_code}/{exam_name}")
+async def public_results(institute_code: str, exam_name: str):
+    """Public result lookup — anyone with institute code + exam name can view published results (roll no only, no personal info)."""
+    inst = await db.institutes.find_one({"code": institute_code}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "Institute not found")
+    recs = await db.exam_results.find(
+        {"institute_id": inst["id"], "exam_name": exam_name, "published": True},
+        {"_id": 0, "teacher_id": 0, "teacher_name": 0, "remarks": 0}
+    ).sort("percentage", -1).to_list(2000)
+    return {"institute": inst["name"], "exam": exam_name, "results": recs}
 
 
 # ============ NOTIFICATIONS ============
@@ -1301,6 +1476,7 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup():
+    await db.users.create_index("unique_id")
     await db.users.create_index("email", unique=True)
     await db.users.create_index("institute_id")
     await db.institutes.create_index("code", unique=True)
@@ -1312,9 +1488,12 @@ async def startup():
     if not inst:
         iid = uid()
         await db.institutes.insert_one({
-            "id": iid, "name": "EduCore Demo Institute", "code": demo_code,
-            "admin_id": None, "created_at": now_iso(),
+            "id": iid, "name": "SWAEK Demo Institute", "code": demo_code,
+            "admin_id": None, "blocked": False, "status": "verified",
+            "created_at": now_iso(),
         })
+    else:
+        await db.institutes.update_one({"code": demo_code}, {"$set": {"status": "verified", "name": "SWAEK Demo Institute"}})
     inst = await db.institutes.find_one({"code": demo_code})
 
     # Seed Super Admin (platform owner) — no institute
@@ -1324,7 +1503,7 @@ async def startup():
     if not sexisting:
         sid = uid()
         await db.users.insert_one({
-            "id": sid, "unique_id": f"SUP-{sid[:6].upper()}",
+            "id": sid, "unique_id": "SWA-OWNER-001",
             "email": super_email, "password_hash": hash_password(super_password),
             "name": "Platform Owner", "role": "superadmin",
             "institute_id": None, "department_id": None,
@@ -1333,6 +1512,8 @@ async def startup():
         })
     elif not verify_password(super_password, sexisting["password_hash"]):
         await db.users.update_one({"email": super_email}, {"$set": {"password_hash": hash_password(super_password)}})
+    if sexisting and not (sexisting.get("unique_id") or "").startswith("SWA-"):
+        await db.users.update_one({"email": super_email}, {"$set": {"unique_id": "SWA-OWNER-001"}})
 
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@educore.io")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@123")
@@ -1340,7 +1521,7 @@ async def startup():
     if not existing:
         aid = uid()
         await db.users.insert_one({
-            "id": aid, "unique_id": f"ADM-{aid[:6].upper()}",
+            "id": aid, "unique_id": f"SWA-DEMOEDU-ADM-001",
             "email": admin_email, "password_hash": hash_password(admin_password),
             "name": "Demo Admin", "role": "admin",
             "institute_id": inst["id"], "department_id": None,
@@ -1349,6 +1530,8 @@ async def startup():
         await db.institutes.update_one({"id": inst["id"]}, {"$set": {"admin_id": aid}})
     elif not verify_password(admin_password, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+    if existing and not (existing.get("unique_id") or "").startswith("SWA-"):
+        await db.users.update_one({"email": admin_email}, {"$set": {"unique_id": "SWA-DEMOEDU-ADM-001"}})
 
     logger.info("Startup complete")
 

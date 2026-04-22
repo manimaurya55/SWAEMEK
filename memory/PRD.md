@@ -1,53 +1,55 @@
-# EduCore — Education Management SaaS
+# SWAEK — Institute Operating System
 
-## Problem Statement
-Build a scalable SaaS-based web platform for managing educational institutions (schools/colleges/universities) with multi-role authentication (Institute Admin, HOD, Teacher, Student, Parent), institute/department management, attendance system with analytics, student/parent/teacher/HOD dashboards, messaging, notices, hostel & mess management, library management, fee payments, PDF student list upload, AI assistant with privacy rules, real-time notifications. Plus iteration-2 additions: Super Admin (platform owner), expanded registration, two-step attendance, QR codes (profile + UPI payment), institute gallery, and fixed messaging.
+**Live URL**: https://campus-sync-15.preview.emergentagent.com
 
-## Tech Stack
-- **Frontend**: React 19, React Router, Tailwind, Shadcn UI, lucide-react, sonner, axios
-- **Backend**: FastAPI, Motor (MongoDB async), PyJWT, bcrypt, pdfplumber, qrcode, emergentintegrations
-- **DB**: MongoDB (UUID id fields, _id excluded from responses)
-- **LLM**: Claude Sonnet 4.5 via Emergent LLM key (AI Assistant)
-- **Auth**: JWT (Bearer + httpOnly cookie fallback), bcrypt password hashing
+## What's Shipped (v5 Final)
 
-## User Personas & Roles
-1. **Super Admin / Platform Owner** (seeded `owner@educore.io` / `Owner@123`) — manages ALL institutes: block/unblock/delete, platform-wide stats, user search.
-2. **Institute Admin** (seeded `admin@educore.io` / `Admin@123`, institute `DEMO-EDU`) — manages single institute: departments, users, fees, notices.
-3. **HOD** — manages department, assigns teachers, posts notices.
-4. **Teacher** — takes attendance (draft → end class → final submit), posts notices, messages.
-5. **Student** — attendance/fees/marks/library/hostel view, pay fees, QR profile.
-6. **Parent** — child's attendance, fees, messages teachers/HOD.
+### Branding
+- Renamed EduCore → **SWAEK** across entire app
+- New custom SVG logo (stylized "S" in forest green + terracotta accent)
+- Full-screen splash animation on first load (logo bounce + wordmark reveal + tagline + underline draw, ~2s, once per session)
+- `<title>SWAEK — Institute Operating System</title>`
 
-## Implemented (2026-04-20 → 2026-04-21)
-- **Tiered Subscriptions (Iteration 3)**: Stripe checkout integration with Free ($0), Pro ($49/mo), Enterprise ($299/mo) plans.
-  - Public `/pricing` page, `Billing & Plan` panel in admin dashboard, `/billing/success` polling page.
-  - Server-side plan definitions (price manipulation impossible from frontend).
-  - `payment_transactions` collection for idempotent tracking.
-  - Webhook endpoint `/api/webhook/stripe` with signature verification.
-  - SuperAdmin revenue analytics: MRR, ARR, conversion rate, lifetime revenue, plan distribution, transactions & subscriptions tabs.
-  - Graceful retry on Stripe propagation delays (polling returns `pending` instead of 500).
-- **Auth + Multi-role**: JWT Bearer + cookie; 6 roles incl. superadmin; unique ID like STU-XXXXXX issued at signup.
-- **Expanded Registration**: DOB, gender, address, emergency contact; role-specific (roll_no/class/section for student; qualification/subjects/experience for teacher/HOD; designation for admin/HOD; child details for parent). Pre-fill institute_code from URL (for QR join flow).
-- **Institute & Department CRUD**: Create/update/delete (admin), assign HOD (demotes previous HOD to teacher).
-- **Attendance** — 2-step: start session → mark → save draft OR end class → review → final submit (irreversible). Student percentage analytics.
-- **Notices** (role-scoped audience) with notifications.
-- **Messaging** (fixed): Conversations list with last message + unread count + "+ New" contact picker; incoming messages marked read when thread opened.
-- **Hostel & Mess**: Rooms (create/allocate), daily mess count.
-- **Library**: Books CRUD, issue, return, per-student records.
-- **Fees**: Create, list, mock payment + **UPI-style QR code** via `/api/qr/fee/{id}`.
-- **PDF Import**: Upload student list PDF → parse via pdfplumber → auto-create student accounts (default password `Student@123`).
-- **AI Assistant (Claude Sonnet 4.5)**: Answers from PUBLIC institute context only; hard-blocks private keywords (salary, password, home address, aadhaar, personal phone).
-- **Gallery**: Institute-wide photo gallery with category + per-department filter; upload via URL (admin/hod/teacher).
-- **QR Codes**: Profile QR (scan to verify user), Institute-Join QR (onboarding), Fee payment QR (UPI format).
-- **Super Admin Console** (`/super-admin`): Platform stats, institute list with block/unblock/delete, global user search, role-protected.
-- **Notifications**: Real-time via polling (12s); on attendance submission/notices/messages/fees.
-- **Design**: Academic editorial theme — Playfair Display + Outfit fonts, forest-green #1A362D on warm sand #F7F5F0, no AI-slop gradients. Seeded admin + demo institute on startup.
+### Auth
+- Login with **email OR unique_id** (toggle on login page)
+- **Forgot password** + Reset password flow (token-based, 1hr TTL, shown on screen in dev)
+- Unique ID format: `SWA-{INSTCODE}-{ROLE3}-{SEQ}` (e.g., `SWA-DEMOEDU-STU-001`, `SWA-OWNER-001`)
+- Expanded registration: DOB, gender, address, role-specific fields
 
-## Next Action Items (Backlog)
-- **P1**: Marks/grades module, attendance charts (Recharts), multi-day attendance view
-- **P1**: Real Stripe integration for fees (playbook ready)
-- **P2**: Cascading delete for super admin (messages, attendance, fees, etc.)
-- **P2**: Split server.py into routers (auth/super/gallery/qr/academics)
-- **P2**: WebSocket-based real-time notifications (replace polling)
-- **P2**: Exam scheduling, report cards, bulk notice email
-- **P3**: Parent-child auto-linking via roll_no, analytics dashboard for super admin
+### Institute Verification Flow
+- New institute created by admin → `status: "pending"`
+- Admin sees "Awaiting verification" banner; other roles cannot register yet
+- Super Admin clicks **Verify** in console → status → `verified` + admin notified
+- `/api/super/institutes/{id}/verify` and `/reject` endpoints
+
+### Exam Results (NEW)
+- Teachers/HOD/Admin record marks per student/subject/exam
+- Auto-grading: A+ (90%+), A (80%+), B (70%+), C (60%+), D (40%+), F
+- HOD/Admin bulk-publish → students notified; students see in own Results tab
+- Public endpoint `/api/results/public/{code}/{exam}` (leaderboard by roll no, no PII)
+
+### 6-Role System with Full Modules
+Super Admin, Institute Admin, HOD, Teacher, Student, Parent — each with scoped dashboards for:
+Attendance (draft→end→submit), Results (draft→publish), Notices, Messages (conversations + unread), Hostel/Mess, Library, Fees (+ UPI QR), Gallery, PDF Import, AI Assistant (Claude Sonnet 4.5), Departments, QR Codes (profile/join/fee), Notifications.
+
+### Monetization
+- Free ($0) / Pro ($49/mo) / Enterprise ($299/mo) via Stripe Checkout
+- **AI Credit Packs** $9 = 500 queries (one-time top-up)
+- Server-side price enforcement, webhook handler, polling status page
+- Super Admin revenue console: MRR, ARR, conversion, lifetime revenue, plan mix, transactions
+
+### Other P1/P2 fixes
+- `/ai/ask` now returns HTTP 503 on upstream errors (was 200)
+- Graceful retry for Stripe session propagation
+- Institute `status` default → `verified` on seed for DEMO-EDU
+
+## Seeded Demo Credentials
+- **Platform Owner**: `owner@educore.io` / `Owner@123` (unique_id: `SWA-OWNER-001`)
+- **Institute Admin**: `admin@educore.io` / `Admin@123` (unique_id: `SWA-DEMOEDU-ADM-001`)
+- **Demo Institute**: `SWAEK Demo Institute` (code: `DEMO-EDU`, status: verified)
+
+## Tech Stack (As Delivered)
+React 19 (CRA) + FastAPI + MongoDB + Tailwind + shadcn/ui + Claude Sonnet 4.5 (emergentintegrations) + Stripe (test keys) + pdfplumber + qrcode.
+
+## Next Step (Recommended)
+Push to GitHub from Emergent (profile → Connect GitHub → "Save to GitHub") before starting the Next.js rebuild so this version is safely backed up.

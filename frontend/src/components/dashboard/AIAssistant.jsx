@@ -4,7 +4,7 @@ import { Send, X, Sparkles, Zap } from "lucide-react";
 
 export default function AIAssistant({ onClose }) {
   const [messages, setMessages] = useState([
-    { role: "ai", text: "Hi! I'm the EduCore assistant. Ask me about your institute — departments, notices, stats. I won't share private info." },
+    { role: "ai", text: "Hi! I'm the SWAEK assistant. Ask me about your institute — departments, notices, stats. I won't share private info." },
   ]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,7 +36,7 @@ export default function AIAssistant({ onClose }) {
       <div className="p-4 border-b border-[#E5E1D5] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-[#D46B4E] rounded-full"/>
-          <div className="font-serif text-lg font-bold">EduCore Assistant</div>
+          <div className="font-serif text-lg font-bold">SWAEK Assistant</div>
         </div>
         <button onClick={onClose} data-testid="ai-close-btn"><X className="w-4 h-4"/></button>
       </div>

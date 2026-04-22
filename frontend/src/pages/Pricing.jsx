@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { GraduationCap, Check, ArrowUpRight, Sparkles } from "lucide-react";
+import { Check, ArrowUpRight, Sparkles } from "lucide-react";
+import Logo from "@/components/Logo";
 
 export default function Pricing() {
   const [plans, setPlans] = useState([]);
@@ -11,7 +12,7 @@ export default function Pricing() {
     <div className="min-h-screen" data-testid="pricing-page">
       <header className="sticky top-0 z-40 glass border-b border-[#E5E1D5]">
         <div className="max-w-7xl mx-auto px-6 lg:px-12 py-5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2"><div className="w-8 h-8 bg-[#1A362D] flex items-center justify-center"><GraduationCap className="w-5 h-5 text-white"/></div><span className="font-serif text-2xl font-bold">EduCore</span></Link>
+          <Link to="/" className="flex items-center gap-2"><Logo size={32}/><span className="font-serif text-2xl font-bold">SWAEK</span></Link>
           <div className="flex items-center gap-3">
             <Link to="/login" className="btn-secondary text-sm" data-testid="pricing-signin">Sign in</Link>
             <Link to="/register" className="btn-primary text-sm" data-testid="pricing-register">Start free <ArrowUpRight className="w-4 h-4"/></Link>

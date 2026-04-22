@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, LogOut, Bell, LayoutGrid, Building2, Users, ClipboardList, Megaphone, MessageSquare, Home, Library as LibIcon, Wallet, FileUp, Sparkles, Image as ImageIcon, UserCircle, CreditCard } from "lucide-react";
+import { LogOut, Bell, LayoutGrid, Building2, Users, ClipboardList, Megaphone, MessageSquare, Home, Library as LibIcon, Wallet, FileUp, Sparkles, Image as ImageIcon, UserCircle, CreditCard, Award } from "lucide-react";
+import Logo from "@/components/Logo";
 import OverviewPanel from "@/components/dashboard/OverviewPanel";
 import DepartmentsPanel from "@/components/dashboard/DepartmentsPanel";
 import UsersPanel from "@/components/dashboard/UsersPanel";
@@ -17,6 +18,7 @@ import AIAssistant from "@/components/dashboard/AIAssistant";
 import GalleryPanel from "@/components/dashboard/GalleryPanel";
 import ProfilePanel from "@/components/dashboard/ProfilePanel";
 import BillingPanel from "@/components/dashboard/BillingPanel";
+import ResultsPanel from "@/components/dashboard/ResultsPanel";
 
 const MENU = [
   { id: "overview", label: "Overview", icon: LayoutGrid, roles: ["admin","hod","teacher","student","parent"] },
@@ -24,6 +26,7 @@ const MENU = [
   { id: "departments", label: "Departments", icon: Building2, roles: ["admin","hod","teacher","student","parent"] },
   { id: "users", label: "People", icon: Users, roles: ["admin","hod","teacher"] },
   { id: "attendance", label: "Attendance", icon: ClipboardList, roles: ["admin","hod","teacher","student","parent"] },
+  { id: "results", label: "Exam Results", icon: Award, roles: ["admin","hod","teacher","student","parent"] },
   { id: "notices", label: "Notices", icon: Megaphone, roles: ["admin","hod","teacher","student","parent"] },
   { id: "messages", label: "Messages", icon: MessageSquare, roles: ["admin","hod","teacher","student","parent"] },
   { id: "gallery", label: "Gallery", icon: ImageIcon, roles: ["admin","hod","teacher","student","parent"] },
@@ -63,6 +66,7 @@ export default function Dashboard() {
       case "departments": return <DepartmentsPanel user={user}/>;
       case "users": return <UsersPanel user={user}/>;
       case "attendance": return <AttendancePanel user={user}/>;
+      case "results": return <ResultsPanel user={user}/>;
       case "notices": return <NoticesPanel user={user}/>;
       case "messages": return <MessagesPanel user={user}/>;
       case "gallery": return <GalleryPanel user={user}/>;
@@ -80,9 +84,9 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside className="w-64 border-r border-[#E5E1D5] bg-white/60 flex-shrink-0 hidden lg:flex flex-col" data-testid="dashboard-sidebar">
         <div className="px-6 py-6 border-b border-[#E5E1D5] flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#1A362D] flex items-center justify-center"><GraduationCap className="w-5 h-5 text-white"/></div>
+          <Logo size={32}/>
           <div>
-            <div className="font-serif text-lg font-bold leading-none">EduCore</div>
+            <div className="font-serif text-lg font-bold leading-none">SWAEK</div>
             <div className="text-xs text-[#5C5C5C] mt-1">{institute?.name || 'Institute'}</div>
           </div>
         </div>
@@ -139,7 +143,16 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="p-6 lg:p-10 stagger-in" data-testid={`panel-${tab}`}>{renderPanel()}</div>
+        <div className="p-6 lg:p-10 stagger-in" data-testid={`panel-${tab}`}>
+          {institute && institute.status && institute.status !== "verified" && user?.role === "admin" && (
+            <div className="mb-6 p-5 border-l-4 border-[#D46B4E] bg-[#FFF6EE]" data-testid="pending-verification-banner">
+              <div className="overline text-[#D46B4E]">Awaiting platform verification</div>
+              <div className="font-serif text-lg font-bold mt-1">Your institute is pending approval.</div>
+              <div className="text-sm text-[#5C5C5C] mt-2">Other members cannot register yet. The Platform Owner will verify you shortly. Your institute code is <b>{institute.code}</b>.</div>
+            </div>
+          )}
+          {renderPanel()}
+        </div>
       </main>
 
       {/* AI Widget */}

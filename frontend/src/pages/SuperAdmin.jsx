@@ -65,7 +65,7 @@ export default function SuperAdmin() {
             </div>
             <div>
               <div className="overline text-[#D46B4E]">Platform Console</div>
-              <div className="font-serif text-xl font-bold">EduCore · Owner</div>
+              <div className="font-serif text-xl font-bold">SWAEK · Owner</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -184,9 +184,9 @@ export default function SuperAdmin() {
         {tab === "institutes" && (
           <div className="mt-6 card-flat overflow-hidden" data-testid="institutes-table">
             <table>
-              <thead><tr><th>Institute</th><th>Code</th><th>Users</th><th>Students</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Institute</th><th>Code</th><th>Users</th><th>Students</th><th>Verification</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                {institutes.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-[#5C5C5C]">No institutes yet.</td></tr>}
+                {institutes.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-[#5C5C5C]">No institutes yet.</td></tr>}
                 {institutes.map(i=>(
                   <tr key={i.id} data-testid={`institute-row-${i.code}`}>
                     <td>
@@ -196,8 +196,18 @@ export default function SuperAdmin() {
                     <td><span className="badge-flat">{i.code}</span></td>
                     <td><Users className="w-3 h-3 inline mr-1"/>{i.user_count}</td>
                     <td>{i.student_count}</td>
+                    <td>
+                      <span className={`badge-flat ${i.status==='verified'?'text-[#1A362D]':i.status==='rejected'?'text-[#B4442A]':'text-[#DDAA55]'}`} data-testid={`verify-status-${i.code}`}>
+                        {i.status || 'pending'}
+                      </span>
+                    </td>
                     <td><span className={`badge-flat ${i.blocked?'text-[#B4442A]':'text-[#1A362D]'}`}>{i.blocked?'Blocked':'Active'}</span></td>
                     <td className="text-right whitespace-nowrap">
+                      {i.status !== 'verified' && (
+                        <button onClick={()=>verify(i.id)} className="text-sm underline mr-4 text-[#1A362D]" data-testid={`verify-btn-${i.code}`}>
+                          <CheckCircle2 className="w-4 h-4 inline"/> Verify
+                        </button>
+                      )}
                       <button onClick={()=>block(i.id, i.blocked)} className="text-sm underline mr-4" data-testid={`toggle-block-${i.code}`}>
                         {i.blocked ? <><CheckCircle2 className="w-4 h-4 inline"/> Unblock</> : <><Ban className="w-4 h-4 inline"/> Block</>}
                       </button>

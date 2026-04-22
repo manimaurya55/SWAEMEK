@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatApiErrorDetail } from "@/lib/api";
 import { toast } from "sonner";
-import { GraduationCap, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+import Logo from "@/components/Logo";
 
 const ROLES = [
   { id: "admin", label: "Institute Admin", hint: "Create or manage your institute" },
@@ -75,8 +76,8 @@ export default function Register() {
     <div className="min-h-screen" data-testid="register-page">
       <div className="max-w-6xl mx-auto px-6 lg:px-12 py-10">
         <Link to="/" className="flex items-center gap-2 mb-10" data-testid="register-brand">
-          <div className="w-8 h-8 bg-[#1A362D] flex items-center justify-center"><GraduationCap className="w-5 h-5 text-white"/></div>
-          <span className="font-serif text-2xl font-bold">EduCore</span>
+          <Logo size={32}/>
+          <span className="font-serif text-2xl font-bold">SWAEK</span>
         </Link>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-4">

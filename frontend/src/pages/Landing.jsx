@@ -41,7 +41,7 @@ export default function Landing() {
             <div className="w-8 h-8 bg-[#1A362D] flex items-center justify-center">
               <GraduationCap className="w-5 h-5 text-white" strokeWidth={2} />
             </div>
-            <span className="font-serif text-2xl font-bold tracking-tight">SWAEK</span>
+            <span className="font-serif text-2xl font-bold tracking-tight">SWAMEK</span>
           </Link>
           <nav className="hidden md:flex items-center gap-10 text-sm">
             <a href="#features" className="hover:text-[#1A362D]">Modules</a>
@@ -66,7 +66,7 @@ export default function Landing() {
               <br/>like a modern campus.
             </h1>
             <p className="text-lg text-[#5C5C5C] max-w-xl mt-8 leading-relaxed">
-              SWAEK unifies admissions, attendance, academics, hostel, library and fees — for admins, HODs, teachers, students and parents — in a single, secure platform.
+              SWAMEK unifies admissions, attendance, academics, hostel, library and fees — for admins, HODs, teachers, students and parents — in a single, secure platform.
             </p>
             <div className="flex flex-wrap gap-4 mt-10">
               <Link to="/register" className="btn-primary" data-testid="hero-start-btn">Start free trial <ArrowUpRight className="w-4 h-4"/></Link>
@@ -178,7 +178,7 @@ export default function Landing() {
             <div className="overline mb-6">The philosophy</div>
             <h2 className="font-serif text-4xl lg:text-5xl font-bold tracking-tight">Built to feel like a campus, not a CRM.</h2>
             <p className="text-[#5C5C5C] mt-6 leading-relaxed text-lg">
-              Education isn't a SaaS funnel. SWAEK is structured around the people you serve: first-year students, department heads, anxious parents, tireless teachers. Every screen is data-dense but deeply human.
+              Education isn't a SaaS funnel. SWAMEK is structured around the people you serve: first-year students, department heads, anxious parents, tireless teachers. Every screen is data-dense but deeply human.
             </p>
             <Link to="/register" className="btn-primary mt-10" data-testid="about-cta-btn">Create your institute <ArrowUpRight className="w-4 h-4"/></Link>
           </div>
@@ -190,7 +190,7 @@ export default function Landing() {
 
       <footer className="border-t border-[#E5E1D5] py-10">
         <div className="max-w-7xl mx-auto px-6 lg:px-12 flex flex-wrap items-center justify-between gap-4 text-sm text-[#5C5C5C]">
-          <div>© 2026 SWAEK · Built for institutions</div>
+          <div>© 2026 SWAMEK · Built for institutions</div>
           <div className="flex gap-6"><a href="#features">Modules</a><a href="#about">About</a><Link to="/login">Sign in</Link></div>
         </div>
       </footer>

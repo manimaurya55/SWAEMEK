@@ -32,7 +32,7 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6" data-testid="reset-password-page">
       <div className="w-full max-w-md">
-        <Link to="/" className="flex items-center gap-2 mb-10"><Logo size={32}/><span className="font-serif text-2xl font-bold">SWAEK</span></Link>
+        <Link to="/" className="flex items-center gap-2 mb-10"><Logo size={32}/><span className="font-serif text-2xl font-bold">SWAMEK</span></Link>
         <div className="overline mb-3">Reset password</div>
         <h1 className="font-serif text-4xl font-bold tracking-tight">Set a new password.</h1>
         <form onSubmit={submit} className="mt-8 space-y-5">

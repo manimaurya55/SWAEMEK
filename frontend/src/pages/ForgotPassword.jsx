@@ -28,7 +28,7 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6" data-testid="forgot-password-page">
       <div className="w-full max-w-md">
-        <Link to="/" className="flex items-center gap-2 mb-10"><Logo size={32}/><span className="font-serif text-2xl font-bold">SWAEK</span></Link>
+        <Link to="/" className="flex items-center gap-2 mb-10"><Logo size={32}/><span className="font-serif text-2xl font-bold">SWAMEK</span></Link>
         <div className="overline mb-3">Forgot password</div>
         <h1 className="font-serif text-4xl font-bold tracking-tight">Reset your password.</h1>
         <p className="text-[#5C5C5C] mt-3">Enter your email. We'll generate a reset token (dev mode — shown on screen).</p>

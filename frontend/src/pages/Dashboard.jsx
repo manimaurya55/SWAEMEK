@@ -89,7 +89,7 @@ export default function Dashboard() {
         <div className="px-6 py-6 border-b border-[#E5E1D5] flex items-center gap-2">
           <Logo size={32}/>
           <div>
-            <div className="font-serif text-lg font-bold leading-none">SWAEK</div>
+            <div className="font-serif text-lg font-bold leading-none">SWAMEK</div>
             <div className="text-xs text-[#5C5C5C] mt-1">{institute?.name || 'Institute'}</div>
           </div>
         </div>

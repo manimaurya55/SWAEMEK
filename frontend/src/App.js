@@ -22,10 +22,10 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
-  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem("swaek_splashed"));
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem("swamek_splashed"));
   useEffect(() => {
     if (showSplash) {
-      const t = setTimeout(() => { sessionStorage.setItem("swaek_splashed", "1"); setShowSplash(false); }, 2100);
+      const t = setTimeout(() => { sessionStorage.setItem("swamek_splashed", "1"); setShowSplash(false); }, 2100);
       return () => clearTimeout(t);
     }
   }, [showSplash]);

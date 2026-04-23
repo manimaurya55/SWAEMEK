@@ -77,7 +77,7 @@ export default function Register() {
       <div className="max-w-6xl mx-auto px-6 lg:px-12 py-10">
         <Link to="/" className="flex items-center gap-2 mb-10" data-testid="register-brand">
           <Logo size={32}/>
-          <span className="font-serif text-2xl font-bold">SWAEK</span>
+          <span className="font-serif text-2xl font-bold">SWAMEK</span>
         </Link>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-4">

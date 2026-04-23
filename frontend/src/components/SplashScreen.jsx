@@ -21,7 +21,7 @@ export default function SplashScreen() {
           <Logo size={80}/>
         </div>
         <div className="splash-brand font-serif text-5xl lg:text-6xl font-black tracking-tight mt-8" style={{color: '#1A362D'}}>
-          SWAEK
+          SWAMEK
         </div>
         <div className="overline mt-4 splash-tagline">An institute operating system</div>
         <div className="splash-bar mt-10 mx-auto"/>

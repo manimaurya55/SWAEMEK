@@ -39,7 +39,7 @@ export default function Login() {
         <img src="https://static.prod-images.emergentagent.com/jobs/0189ebdf-8db6-43d6-91e9-f93170f093e5/images/8bbd332c07a677e2ea6de403aa8c441a35a4b9cd87c473822fb8e21e38e16d98.png" alt="campus" className="w-full h-full object-cover"/>
         <div className="absolute inset-0 bg-[#1A362D]/30"/>
         <div className="absolute bottom-12 left-12 right-12 text-white">
-          <div className="overline text-white/80">SWAEK</div>
+          <div className="overline text-white/80">SWAMEK</div>
           <h2 className="font-serif text-5xl font-bold mt-4 leading-tight">A quieter way to run a loud campus.</h2>
         </div>
       </div>
@@ -47,7 +47,7 @@ export default function Login() {
         <form onSubmit={onSubmit} className="w-full max-w-md" data-testid="login-form">
           <Link to="/" className="flex items-center gap-2 mb-12" data-testid="login-brand">
             <Logo size={32}/>
-            <span className="font-serif text-2xl font-bold">SWAEK</span>
+            <span className="font-serif text-2xl font-bold">SWAMEK</span>
           </Link>
           <div className="overline mb-4">Sign in</div>
           <h1 className="font-serif text-4xl font-bold tracking-tight">Welcome back.</h1>

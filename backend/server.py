@@ -294,8 +294,8 @@ async def next_unique_id(institute_code: str, role: str) -> str:
     """Generate sequential unique ID like SWA-{INSTCODE}-{ROLE3}-{seq}"""
     code = (institute_code or "XXX").replace("-", "").upper()[:8]
     role3 = role.upper()[:3]
-    count = await db.users.count_documents({"unique_id": {"$regex": f"^SWA-{code}-{role3}-"}})
-    return f"SWA-{code}-{role3}-{str(count + 1).zfill(3)}"
+    count = await db.users.count_documents({"unique_id": {"$regex": f"^SWM-{code}-{role3}-"}})
+    return f"SWM-{code}-{role3}-{str(count + 1).zfill(3)}"
 
 
 # ============ AUTH ============
@@ -1543,12 +1543,12 @@ async def startup():
     if not inst:
         iid = uid()
         await db.institutes.insert_one({
-            "id": iid, "name": "SWAEK Demo Institute", "code": demo_code,
+            "id": iid, "name": "SWAMEK Demo Institute", "code": demo_code,
             "admin_id": None, "blocked": False, "status": "verified",
             "created_at": now_iso(),
         })
     else:
-        await db.institutes.update_one({"code": demo_code}, {"$set": {"status": "verified", "name": "SWAEK Demo Institute"}})
+        await db.institutes.update_one({"code": demo_code}, {"$set": {"status": "verified", "name": "SWAMEK Demo Institute"}})
     inst = await db.institutes.find_one({"code": demo_code})
 
     # Seed Super Admin (platform owner) — no institute
@@ -1558,7 +1558,7 @@ async def startup():
     if not sexisting:
         sid = uid()
         await db.users.insert_one({
-            "id": sid, "unique_id": "SWA-OWNER-001",
+            "id": sid, "unique_id": "SWM-OWNER-001",
             "email": super_email, "password_hash": hash_password(super_password),
             "name": "Platform Owner", "role": "superadmin",
             "institute_id": None, "department_id": None,
@@ -1567,8 +1567,8 @@ async def startup():
         })
     elif not verify_password(super_password, sexisting["password_hash"]):
         await db.users.update_one({"email": super_email}, {"$set": {"password_hash": hash_password(super_password)}})
-    if sexisting and not (sexisting.get("unique_id") or "").startswith("SWA-"):
-        await db.users.update_one({"email": super_email}, {"$set": {"unique_id": "SWA-OWNER-001"}})
+    if sexisting and not (sexisting.get("unique_id") or "").startswith("SWM-"):
+        await db.users.update_one({"email": super_email}, {"$set": {"unique_id": "SWM-OWNER-001"}})
 
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@educore.io")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@123")
@@ -1576,7 +1576,7 @@ async def startup():
     if not existing:
         aid = uid()
         await db.users.insert_one({
-            "id": aid, "unique_id": f"SWA-DEMOEDU-ADM-001",
+            "id": aid, "unique_id": "SWM-DEMOEDU-ADM-001",
             "email": admin_email, "password_hash": hash_password(admin_password),
             "name": "Demo Admin", "role": "admin",
             "institute_id": inst["id"], "department_id": None,
@@ -1585,8 +1585,8 @@ async def startup():
         await db.institutes.update_one({"id": inst["id"]}, {"$set": {"admin_id": aid}})
     elif not verify_password(admin_password, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
-    if existing and not (existing.get("unique_id") or "").startswith("SWA-"):
-        await db.users.update_one({"email": admin_email}, {"$set": {"unique_id": "SWA-DEMOEDU-ADM-001"}})
+    if existing and not (existing.get("unique_id") or "").startswith("SWM-"):
+        await db.users.update_one({"email": admin_email}, {"$set": {"unique_id": "SWM-DEMOEDU-ADM-001"}})
 
     # Seed demo users (one-click demo login on landing page)
     demo_users = [

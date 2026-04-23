@@ -65,7 +65,7 @@ export default function SuperAdmin() {
             </div>
             <div>
               <div className="overline text-[#D46B4E]">Platform Console</div>
-              <div className="font-serif text-xl font-bold">SWAEK · Owner</div>
+              <div className="font-serif text-xl font-bold">SWAMEK · Owner</div>
             </div>
           </div>
           <div className="flex items-center gap-3">

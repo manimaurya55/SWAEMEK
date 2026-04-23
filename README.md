@@ -1,4 +1,4 @@
-# SWAEK — Institute Operating System
+# SWAMEK — Institute Operating System
 
 Multi-tenant SaaS platform for educational institutions with 6 roles, 14+ modules, AI assistant, Stripe billing, exam results publishing, and real-time notifications.
 

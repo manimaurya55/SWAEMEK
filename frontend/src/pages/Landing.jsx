@@ -1,12 +1,37 @@
-import { Link } from "react-router-dom";
-import { BookOpen, Users, Sparkles, ArrowUpRight, Building2, GraduationCap } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { BookOpen, Users, Sparkles, ArrowUpRight, Building2, GraduationCap, Zap } from "lucide-react";
 import Logo from "@/components/Logo";
+import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+
+const DEMO_ROLES = [
+  { id: "admin", label: "Institute Admin", email: "admin@demo.com", pw: "Demo@123", desc: "Manage departments & institute" },
+  { id: "hod", label: "Head of Dept.", email: "hod@demo.com", pw: "Demo@123", desc: "Run your department" },
+  { id: "teacher", label: "Teacher", email: "teacher@demo.com", pw: "Demo@123", desc: "Take classes & mark results" },
+  { id: "student", label: "Student", email: "student@demo.com", pw: "Demo@123", desc: "Attendance, marks, fees" },
+  { id: "parent", label: "Parent", email: "parent@demo.com", pw: "Demo@123", desc: "Track your child" },
+  { id: "hostel_staff", label: "Hostel Staff", email: "hostel@demo.com", pw: "Demo@123", desc: "Rooms & mess register" },
+];
 
 const HERO_BG = "https://static.prod-images.emergentagent.com/jobs/0189ebdf-8db6-43d6-91e9-f93170f093e5/images/8bbd332c07a677e2ea6de403aa8c441a35a4b9cd87c473822fb8e21e38e16d98.png";
 const STUDENTS = "https://images.pexels.com/photos/1454360/pexels-photo-1454360.jpeg";
 const CAMPUS = "https://images.unsplash.com/photo-1709085783594-666111a690d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwzfHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBjYW1wdXN8ZW58MHx8fHwxNzc2NjY4NzMzfDA&ixlib=rb-4.1.0&q=85";
 
 export default function Landing() {
+  const nav = useNavigate();
+  const { setUser } = useAuth();
+
+  const demoLogin = async (email, pw, role) => {
+    try {
+      const { data } = await api.post("/auth/login", { email, password: pw });
+      localStorage.setItem("edu_token", data.token);
+      setUser(data.user);
+      toast.success(`Signed in as ${data.user.name}`);
+      nav(data.user.role === "superadmin" ? "/super-admin" : "/dashboard");
+    } catch (e) { toast.error(e.response?.data?.detail || "Demo login failed"); }
+  };
+
   return (
     <div className="min-h-screen" data-testid="landing-page">
       {/* Nav */}
@@ -45,7 +70,7 @@ export default function Landing() {
             </p>
             <div className="flex flex-wrap gap-4 mt-10">
               <Link to="/register" className="btn-primary" data-testid="hero-start-btn">Start free trial <ArrowUpRight className="w-4 h-4"/></Link>
-              <Link to="/login" className="btn-secondary" data-testid="hero-login-btn">I have an account</Link>
+              <a href="#demo" className="btn-secondary" data-testid="hero-demo-btn"><Zap className="w-4 h-4"/> Try demo login</a>
             </div>
             <div className="flex items-center gap-8 mt-14">
               <div><div className="font-serif text-3xl font-bold">5</div><div className="overline mt-1">Role types</div></div>
@@ -62,6 +87,34 @@ export default function Landing() {
               <div className="font-serif text-4xl font-bold mt-2">92.4%</div>
               <div className="text-sm text-[#5C5C5C] mt-2">across 14 departments</div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Demo Login cards */}
+      <section id="demo" className="border-t border-[#E5E1D5] bg-[#EFEBE0]" data-testid="demo-section">
+        <div className="max-w-7xl mx-auto px-6 lg:px-12 py-24">
+          <div className="flex flex-wrap items-end justify-between gap-6 mb-12">
+            <div>
+              <div className="overline mb-4 flex items-center gap-2"><Zap className="w-3 h-3 text-[#D46B4E]"/> Instant access</div>
+              <h2 className="font-serif text-4xl lg:text-5xl font-bold tracking-tight max-w-3xl">Jump in as any role.</h2>
+              <p className="text-[#5C5C5C] mt-4 max-w-2xl leading-relaxed">One-click demo logins below. Each dashboard is tailored — different nav, permissions, UX.</p>
+            </div>
+            <span className="badge-flat">Live · Demo data ready</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {DEMO_ROLES.map((r,i)=>(
+              <button key={r.id} onClick={()=>demoLogin(r.email, r.pw, r.id)}
+                className="card-flat p-6 text-left group transition" data-testid={`demo-login-${r.id}`}>
+                <div className="overline">{r.id.replace('_',' ')}</div>
+                <h3 className="font-serif text-xl font-bold mt-2">{r.label}</h3>
+                <p className="text-sm text-[#5C5C5C] mt-2">{r.desc}</p>
+                <div className="text-xs text-[#5C5C5C] mt-4 font-mono">{r.email}</div>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-[#1A362D] group-hover:gap-3 transition-all">
+                  Enter dashboard <ArrowUpRight className="w-4 h-4"/>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </section>

@@ -39,8 +39,8 @@ app = FastAPI(title="EduCore API")
 api = APIRouter(prefix="/api")
 
 JWT_ALGO = "HS256"
-ROLES = ("superadmin", "admin", "hod", "teacher", "student", "parent")
-Role = Literal["superadmin", "admin", "hod", "teacher", "student", "parent"]
+ROLES = ("superadmin", "admin", "hod", "teacher", "student", "parent", "hostel_staff")
+Role = Literal["superadmin", "admin", "hod", "teacher", "student", "parent", "hostel_staff"]
 
 
 # ============ Utils ============
@@ -717,7 +717,7 @@ async def student_attendance(student_id: str, user: dict = Depends(get_current_u
 
 # ============ HOSTEL ============
 @api.post("/hostel/rooms")
-async def create_room(data: RoomIn, user: dict = Depends(require_roles("admin", "hod"))):
+async def create_room(data: RoomIn, user: dict = Depends(require_roles("admin", "hod", "hostel_staff"))):
     doc = {"id": uid(), "institute_id": user["institute_id"], "room_number": data.room_number,
            "capacity": data.capacity, "block": data.block, "occupants": [], "created_at": now_iso()}
     await db.rooms.insert_one(doc)
@@ -742,7 +742,7 @@ async def allocate_room(data: AllocateIn, user: dict = Depends(require_roles("ad
 
 
 @api.post("/hostel/mess-entry/{student_id}")
-async def mess_entry(student_id: str, user: dict = Depends(require_roles("admin", "hod", "teacher"))):
+async def mess_entry(student_id: str, user: dict = Depends(require_roles("admin", "hod", "teacher", "hostel_staff"))):
     await db.mess_entries.insert_one({
         "id": uid(), "institute_id": user["institute_id"],
         "student_id": student_id, "date": now_iso(),
@@ -1446,6 +1446,61 @@ async def public_results(institute_code: str, exam_name: str):
     return {"institute": inst["name"], "exam": exam_name, "results": recs}
 
 
+# ============ ANALYTICS ============
+@api.get("/analytics/dashboard")
+async def analytics_dashboard(user: dict = Depends(require_roles("admin", "hod"))):
+    iid = user["institute_id"]
+    # Role distribution
+    role_dist = []
+    for r in ("admin","hod","teacher","student","parent","hostel_staff"):
+        c = await db.users.count_documents({"institute_id": iid, "role": r})
+        role_dist.append({"role": r, "count": c})
+
+    # Attendance trend — last 7 days
+    from collections import defaultdict
+    from datetime import date
+    today = datetime.now(timezone.utc).date()
+    att_trend = []
+    for offset in range(6, -1, -1):
+        d = today - timedelta(days=offset)
+        day_start = datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc).isoformat()
+        day_end = datetime.combine(d, datetime.max.time(), tzinfo=timezone.utc).isoformat()
+        records = await db.attendance_records.find(
+            {"institute_id": iid, "date": {"$gte": day_start, "$lte": day_end}}, {"_id": 0}
+        ).to_list(5000)
+        total = len(records)
+        present = sum(1 for r in records if r.get("present"))
+        att_trend.append({
+            "date": d.strftime("%a"),
+            "present": present,
+            "absent": total - present,
+            "percentage": round((present/total*100) if total else 0, 1),
+        })
+
+    # Fee collection — paid vs pending
+    fees = await db.fees.find({"institute_id": iid}, {"_id": 0}).to_list(5000)
+    fee_summary = {
+        "paid_amount": sum(f["amount"] for f in fees if f.get("paid")),
+        "pending_amount": sum(f["amount"] for f in fees if not f.get("paid")),
+        "paid_count": sum(1 for f in fees if f.get("paid")),
+        "pending_count": sum(1 for f in fees if not f.get("paid")),
+    }
+
+    # Subject performance (avg % per subject from exam_results)
+    results = await db.exam_results.find({"institute_id": iid, "published": True}, {"_id": 0}).to_list(5000)
+    subj_map = defaultdict(list)
+    for r in results:
+        subj_map[r["subject"]].append(r["percentage"])
+    subject_perf = [{"subject": s, "avg": round(sum(v)/len(v), 1)} for s, v in subj_map.items()][:10]
+
+    return {
+        "role_distribution": role_dist,
+        "attendance_trend": att_trend,
+        "fee_summary": fee_summary,
+        "subject_performance": subject_perf,
+    }
+
+
 # ============ NOTIFICATIONS ============
 @api.get("/notifications")
 async def list_notifications(user: dict = Depends(get_current_user)):
@@ -1532,6 +1587,29 @@ async def startup():
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
     if existing and not (existing.get("unique_id") or "").startswith("SWA-"):
         await db.users.update_one({"email": admin_email}, {"$set": {"unique_id": "SWA-DEMOEDU-ADM-001"}})
+
+    # Seed demo users (one-click demo login on landing page)
+    demo_users = [
+        ("hod@demo.com", "Demo@123", "Demo HOD", "hod"),
+        ("teacher@demo.com", "Demo@123", "Demo Teacher", "teacher"),
+        ("student@demo.com", "Demo@123", "Demo Student", "student"),
+        ("parent@demo.com", "Demo@123", "Demo Parent", "parent"),
+        ("hostel@demo.com", "Demo@123", "Demo Hostel Staff", "hostel_staff"),
+        ("admin@demo.com", "Demo@123", "Demo Admin", "admin"),
+    ]
+    for email, pw, name, role in demo_users:
+        found = await db.users.find_one({"email": email})
+        if not found:
+            uid_str = uid()
+            new_uid = await next_unique_id("DEMO-EDU", role)
+            await db.users.insert_one({
+                "id": uid_str, "unique_id": new_uid,
+                "email": email, "password_hash": hash_password(pw),
+                "name": name, "role": role,
+                "institute_id": inst["id"], "department_id": None,
+                "profile": {"roll_no": "R001"} if role == "student" else {},
+                "verified": True, "created_at": now_iso(),
+            })
 
     logger.info("Startup complete")
 

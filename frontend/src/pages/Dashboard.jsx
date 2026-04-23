@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Bell, LayoutGrid, Building2, Users, ClipboardList, Megaphone, MessageSquare, Home, Library as LibIcon, Wallet, FileUp, Sparkles, Image as ImageIcon, UserCircle, CreditCard, Award } from "lucide-react";
+import { LogOut, Bell, LayoutGrid, Building2, Users, ClipboardList, Megaphone, MessageSquare, Home, Library as LibIcon, Wallet, FileUp, Sparkles, Image as ImageIcon, UserCircle, CreditCard, Award, BarChart3 } from "lucide-react";
 import Logo from "@/components/Logo";
 import OverviewPanel from "@/components/dashboard/OverviewPanel";
 import DepartmentsPanel from "@/components/dashboard/DepartmentsPanel";
@@ -19,18 +19,20 @@ import GalleryPanel from "@/components/dashboard/GalleryPanel";
 import ProfilePanel from "@/components/dashboard/ProfilePanel";
 import BillingPanel from "@/components/dashboard/BillingPanel";
 import ResultsPanel from "@/components/dashboard/ResultsPanel";
+import AnalyticsPanel from "@/components/dashboard/AnalyticsPanel";
 
 const MENU = [
-  { id: "overview", label: "Overview", icon: LayoutGrid, roles: ["admin","hod","teacher","student","parent"] },
-  { id: "profile", label: "My Profile", icon: UserCircle, roles: ["admin","hod","teacher","student","parent"] },
+  { id: "overview", label: "Overview", icon: LayoutGrid, roles: ["admin","hod","teacher","student","parent","hostel_staff"] },
+  { id: "analytics", label: "Analytics", icon: BarChart3, roles: ["admin","hod"] },
+  { id: "profile", label: "My Profile", icon: UserCircle, roles: ["admin","hod","teacher","student","parent","hostel_staff"] },
   { id: "departments", label: "Departments", icon: Building2, roles: ["admin","hod","teacher","student","parent"] },
   { id: "users", label: "People", icon: Users, roles: ["admin","hod","teacher"] },
   { id: "attendance", label: "Attendance", icon: ClipboardList, roles: ["admin","hod","teacher","student","parent"] },
   { id: "results", label: "Exam Results", icon: Award, roles: ["admin","hod","teacher","student","parent"] },
-  { id: "notices", label: "Notices", icon: Megaphone, roles: ["admin","hod","teacher","student","parent"] },
-  { id: "messages", label: "Messages", icon: MessageSquare, roles: ["admin","hod","teacher","student","parent"] },
-  { id: "gallery", label: "Gallery", icon: ImageIcon, roles: ["admin","hod","teacher","student","parent"] },
-  { id: "hostel", label: "Hostel & Mess", icon: Home, roles: ["admin","hod","teacher","student","parent"] },
+  { id: "notices", label: "Notices", icon: Megaphone, roles: ["admin","hod","teacher","student","parent","hostel_staff"] },
+  { id: "messages", label: "Messages", icon: MessageSquare, roles: ["admin","hod","teacher","student","parent","hostel_staff"] },
+  { id: "gallery", label: "Gallery", icon: ImageIcon, roles: ["admin","hod","teacher","student","parent","hostel_staff"] },
+  { id: "hostel", label: "Hostel & Mess", icon: Home, roles: ["admin","hod","teacher","student","parent","hostel_staff"] },
   { id: "library", label: "Library", icon: LibIcon, roles: ["admin","hod","teacher","student","parent"] },
   { id: "fees", label: "Fees", icon: Wallet, roles: ["admin","hod","student","parent"] },
   { id: "billing", label: "Billing & Plan", icon: CreditCard, roles: ["admin"] },
@@ -62,6 +64,7 @@ export default function Dashboard() {
   const renderPanel = () => {
     switch (tab) {
       case "overview": return <OverviewPanel user={user} institute={institute}/>;
+      case "analytics": return <AnalyticsPanel/>;
       case "profile": return <ProfilePanel user={user}/>;
       case "departments": return <DepartmentsPanel user={user}/>;
       case "users": return <UsersPanel user={user}/>;

@@ -31,3 +31,4 @@ yarn-error.log*
 
 # OS
 Thumbs.db
+frontend/node_modules/.cache/default-development/2.pack
